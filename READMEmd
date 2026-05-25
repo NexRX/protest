@@ -1,0 +1,5 @@
+Protocol:
+- Everything defined by code, models, APIs, everything.
+- Transparent client interface. What the server returns is what the client gets. (No wrapping)
+- Typesafety.
+- HTTP/3 ?

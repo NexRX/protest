@@ -1,11 +1,15 @@
-use crate::{RequestStream, Router};
+use crate::error::ServerError;
+use crate::{RequestStream, Response, ResponseSender, TRouter};
 use tokio_quiche::ServerH3Controller;
 use tokio_quiche::http3::driver::{H3Event, OutboundFrameSender, ServerH3Event};
 use tracing::{debug, error, info, trace, warn};
 
 #[allow(unused)]
-pub async fn safely_handle_connection(controller: ServerH3Controller, router: &Router) {
-    let _ = handle_connection(controller, router)
+pub async fn safely_handle_connection(
+    controller: ServerH3Controller,
+    routers: &[Box<dyn TRouter>],
+) {
+    let _ = handle_connection(controller, routers)
         .await
         .inspect_err(|err| error!(?err, "Error handling connection"));
 }
@@ -13,8 +17,8 @@ pub async fn safely_handle_connection(controller: ServerH3Controller, router: &R
 #[allow(unused)]
 pub async fn handle_connection(
     mut controller: ServerH3Controller,
-    router: &Router,
-) -> Result<(), Box<dyn std::error::Error>> {
+    routers: &[Box<dyn TRouter>],
+) -> Result<(), ServerError> {
     let mut request: Option<(RequestStream, OutboundFrameSender)> = None;
 
     while let Some(event) = controller.event_receiver_mut().recv().await {
@@ -57,9 +61,7 @@ pub async fn handle_connection(
                     (false, _) => Err("Request was consumed in error")?,
                     (true, false) => trace!("Http Event (Core) - Receiving body bytes"),
                     (true, true) => {
-                        let (request, send) = request.take().unwrap();
-                        trace!(?request, "Http Event (Core) - Responding to request");
-                        router.handle_request(request, send).await?;
+                        handle_request_via_iter(request.take().unwrap(), routers).await?;
                     }
                 };
             }
@@ -69,9 +71,7 @@ pub async fn handle_connection(
                     (false, _) => Err("Request was consumed in error")?,
                     (true, false) => info!("More bytes available"),
                     (true, true) => {
-                        let (request, send) = request.take().unwrap();
-                        trace!(?request, "Http Event (Core) - Responding to request");
-                        router.handle_request(request, send).await?;
+                        handle_request_via_iter(request.take().unwrap(), routers).await?;
                     }
                 }
             }
@@ -84,5 +84,23 @@ pub async fn handle_connection(
         }
     }
     debug!("Connection finished");
+    Ok(())
+}
+
+async fn handle_request_via_iter(
+    (request, mut send): (RequestStream, OutboundFrameSender),
+    routers: &[Box<dyn TRouter>],
+) -> Result<(), ServerError> {
+    trace!(?request, "Http Event (Core) - Responding to request");
+
+    if let Some(router) = routers
+        .iter()
+        .find(|router| router.can_handle_request(&request))
+    {
+        router.handle_request(request, &mut send).await?;
+        return Ok(());
+    }
+
+    Response::route_not_found().send(&mut send).await?;
     Ok(())
 }

@@ -73,7 +73,7 @@ impl ResponseBody for serde_json::Value {
     }
 }
 
-#[derive(Constructor, Deref, DerefMut)]
+#[derive(Debug, Constructor, Deref, DerefMut)]
 pub struct Json<T: Serialize + Send + 'static>(pub T);
 
 impl<T: Serialize + Send + 'static> ResponseBody for Json<T> {

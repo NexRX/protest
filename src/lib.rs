@@ -1,14 +1,16 @@
+mod error;
 mod http;
-#[cfg(test)]
-mod integration_test;
 mod request;
 mod response;
+mod router;
 mod server;
-#[cfg(test)]
-mod test;
+mod types;
 
+#[cfg(test)]
+mod integration_test;
 pub use http::*;
 pub use request::*;
 pub use response::*;
-#[allow(unused)]
+pub use router::*;
 pub use server::*;
+pub use types::*;

@@ -2,7 +2,18 @@ use crate::ParseHeaderError;
 use derive_more::Eq;
 use quiche::h3::{self, NameValue};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    serde::Deserialize,
+    strum::Display,
+    strum::AsRefStr,
+    strum::EnumString,
+)]
+#[strum(serialize_all = "UPPERCASE")]
 pub enum Method {
     GET,
     POST,
@@ -15,6 +26,12 @@ pub enum Method {
     TRACE,
 }
 
+impl Method {
+    pub fn as_bytes(&self) -> &[u8] {
+        self.as_ref().as_bytes()
+    }
+}
+
 impl TryFrom<&h3::Header> for Method {
     type Error = ParseHeaderError;
 
@@ -22,20 +39,7 @@ impl TryFrom<&h3::Header> for Method {
         let method_str = std::str::from_utf8(value.value())
             .map_err(|e| ParseHeaderError::BadValue("Method".to_string(), e))?;
 
-        match method_str {
-            "GET" => Ok(Method::GET),
-            "POST" => Ok(Method::POST),
-            "PUT" => Ok(Method::PUT),
-            "DELETE" => Ok(Method::DELETE),
-            "PATCH" => Ok(Method::PATCH),
-            "OPTIONS" => Ok(Method::OPTIONS),
-            "HEAD" => Ok(Method::HEAD),
-            "CONNECT" => Ok(Method::CONNECT),
-            "TRACE" => Ok(Method::TRACE),
-            _ => Err(ParseHeaderError::Unexpected(
-                "Method".to_string(),
-                method_str.to_string(),
-            )),
-        }
+        Self::try_from(method_str)
+            .map_err(|e| ParseHeaderError::Unexpected("Method".to_string(), e.to_string()))
     }
 }

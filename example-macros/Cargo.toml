@@ -1,0 +1,120 @@
+[package]
+name = "protest-macros"
+version = "0.1.0"
+edition = "2024"
+description = "A procedural macro crate"
+
+# Proc macro crates must set this to true
+[lib]
+proc-macro = true
+
+# ---------------------------------------------------------------------------
+# Core proc-macro dependencies
+# ---------------------------------------------------------------------------
+[dependencies]
+
+# The two pillars of proc macro development.
+# syn: parse Rust token streams into a typed AST.
+# quote: turn Rust values back into token streams.
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = [
+    "full",        # All Rust syntax (exprs, items, stmts, etc.)
+    "extra-traits", # Debug/PartialEq/Hash on AST nodes — invaluable for debugging
+    "parsing",     # Enabled by default, explicit for clarity
+    "printing",    # ToTokens impls
+    "visit",       # Read-only AST visitor trait
+    "visit-mut",   # Mutable AST visitor trait
+    "fold",        # AST transformer trait
+] }
+
+# ---------------------------------------------------------------------------
+# Attribute / argument parsing helpers
+# ---------------------------------------------------------------------------
+
+# Darling: derive-based parsing of macro attributes into Rust structs.
+# Instead of hand-rolling syn::parse for every attribute, you annotate a
+# struct with #[darling(attributes(my_attr))] and it does the work.
+darling = { version = "0.20", features = ["suggestions"] }
+
+# Deluxe: similar to darling but with a slightly different API; some people
+# prefer its ergonomics for complex attribute schemas.
+deluxe = "0.5"
+
+# manyhow: structured error handling + nice compiler diagnostics for macros.
+# Gives you anyhow-style ? propagation inside proc macro functions and
+# emits proper Diagnostic spans rather than panics.
+manyhow = { version = "0.10", features = ["darling", "syn"] }
+
+# ---------------------------------------------------------------------------
+# Span / diagnostic utilities
+# ---------------------------------------------------------------------------
+
+# proc-macro-error2: the spiritual successor to proc-macro-error.
+# Lets you call abort!(span, "message") anywhere and emits a compiler error
+# with the right source location.  Also provides emit_warning!, emit_note!.
+proc-macro-error2 = "2"
+
+# ---------------------------------------------------------------------------
+# Code generation helpers
+# ---------------------------------------------------------------------------
+
+# Useful for generating unique identifiers that won't collide.
+# e.g. let ident = format_ident!("__my_macro_{}", name);
+# (format_ident! is re-exported from the `quote` crate, but this makes it
+#  explicit if you need the helper standalone.)
+
+# Convert between naming conventions (snake_case ↔ CamelCase ↔ SCREAMING_SNAKE, etc.)
+heck = "0.5"
+
+# ---------------------------------------------------------------------------
+# Testing helpers  (also used at compile time inside the macro crate itself)
+# ---------------------------------------------------------------------------
+
+# prettyplease: format generated TokenStream output the same way rustfmt
+# would, making snapshot tests and debug output human-readable.
+prettyplease = "0.2"
+
+# ---------------------------------------------------------------------------
+# General utilities (usable inside a proc-macro crate)
+# ---------------------------------------------------------------------------
+
+# Proc macro crates run at compile time so they can't use tokio etc., but
+# these pure-logic crates are fair game:
+
+# Ordered HashMap — deterministic iteration order matters when generating code.
+indexmap = "2"
+
+# Interning / string deduplication — handy when you're building symbol tables.
+# (optional; remove if you don't need it)
+# string-interner = "0.15"
+
+# ---------------------------------------------------------------------------
+# Dev-dependencies (only used in tests / examples)
+# ---------------------------------------------------------------------------
+[dev-dependencies]
+
+# trybuild: compiles a set of .rs files and asserts they pass or fail with
+# specific error messages.  The gold standard for testing proc macros.
+trybuild = { version = "1", features = ["diff"] }
+
+# macrotest: checks that a macro expands to exactly the expected token stream.
+# Pairs with `cargo expand` under the hood.
+macrotest = "1"
+
+# insta: snapshot testing.  Combine with prettyplease to snapshot-test the
+# formatted expansion of your macro.
+insta = { version = "1", features = ["ron"] }
+
+# rstest: parametric tests with fixtures — great for testing many input shapes.
+rstest = "0.22"
+
+# ---------------------------------------------------------------------------
+# Workspace / feature flags
+# ---------------------------------------------------------------------------
+[features]
+default = []
+
+# Enable this to get extra span/diagnostic info during development.
+# Usage: cargo build --features debug-spans
+debug-spans = []

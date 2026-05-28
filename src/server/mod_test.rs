@@ -1,5 +1,5 @@
 use super::Server;
-use crate::{Method, Request, Response, ResponseHeaders, Status};
+use crate::{Method, Request, Response, ResponseHeaders, Router, Status};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio_quiche::settings::CertificateKind;
@@ -58,9 +58,9 @@ fn with_cert_overrides_previous_cert() {
 
 #[test]
 fn add_route_increases_router_len() {
-    use crate::server::{RouteHandler, TypedRoute};
-    let mut server = Server::new();
-    server.add_route(TypedRoute {
+    use crate::{RouteHandler, TypedRoute};
+    let mut router = Router::new(());
+    router.add(TypedRoute {
         method: Method::GET,
         path: PathBuf::from("/"),
         handler: RouteHandler::Sync(|x: Request<String>| Response {
@@ -69,14 +69,16 @@ fn add_route_increases_router_len() {
             body: x.body,
         }),
     });
+
+    let server = Server::new_with(router);
     assert_eq!(server.router.len(), 1);
 }
 
 #[test]
 fn add_route_thats_async() {
-    use crate::server::{RouteHandler, TypedRoute};
-    let mut server = Server::new();
-    server.add_route(TypedRoute {
+    use crate::{RouteHandler, TypedRoute};
+    let mut router = Router::new(());
+    router.add(TypedRoute {
         method: Method::GET,
         path: PathBuf::from("/"),
         handler: RouteHandler::from(async |x: Request<String>| Response {
@@ -85,16 +87,18 @@ fn add_route_thats_async() {
             body: x.body,
         }),
     });
+
+    let server = Server::new_with(router);
     assert_eq!(server.router.len(), 1);
 }
 
 #[test]
 fn nest_routes_merges_router_into_server() {
-    use crate::server::{RouteHandler, Router, TypedRoute};
+    use crate::{RouteHandler, Router, TypedRoute};
     let mut server = Server::new();
-    let mut extra = Router::default();
+    let mut extra = Router::new(());
 
-    extra.add_route(TypedRoute {
+    extra.add(TypedRoute {
         method: Method::POST,
         path: PathBuf::from("/submit"),
         handler: RouteHandler::Sync(|x: Request<String>| Response {
@@ -103,7 +107,7 @@ fn nest_routes_merges_router_into_server() {
             body: x.body,
         }),
     });
-    extra.add_route(TypedRoute {
+    extra.add(TypedRoute {
         method: Method::DELETE,
         path: PathBuf::from("/item"),
         handler: RouteHandler::Sync(|x: Request<String>| Response {
@@ -113,6 +117,7 @@ fn nest_routes_merges_router_into_server() {
         }),
     });
 
-    server.nest_routes(extra);
-    assert_eq!(server.router.len(), 2);
+    server.routes(extra);
+    assert_eq!(server.router.len(), 1);
+    assert_eq!(server.router[0].len(), 2);
 }

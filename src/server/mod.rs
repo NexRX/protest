@@ -1,18 +1,13 @@
 mod controller;
 #[cfg(test)]
 mod mod_test;
-mod router;
-#[cfg(test)]
-mod router_test;
 
 pub(crate) use controller::*;
-pub(crate) use router::*;
 
-use crate::{FromBody, Response, ResponseSender};
-use serde::de::DeserializeOwned;
+use crate::TRouter;
 use std::env::temp_dir;
-use std::fmt::Debug;
 use std::net::SocketAddr;
+use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio_quiche::http3::settings::Http3Settings;
@@ -25,7 +20,7 @@ use tokio_stream::StreamExt;
 pub struct Server {
     pub(crate) cert: Option<TlsCertificatePathsOwned>,
     pub(crate) addr: SocketAddr,
-    pub(crate) router: Router,
+    pub(crate) router: Vec<Box<dyn TRouter>>,
 }
 
 pub struct TlsCertificatePathsOwned {
@@ -43,12 +38,24 @@ impl Server {
         Self {
             cert: None,
             addr: SocketAddr::from(([0, 0, 0, 0], 4043)),
-            router: Router::default(),
+            router: vec![],
         }
     }
 
-    pub fn with_address(&mut self, addr: SocketAddr) -> &mut Self {
-        self.addr = addr;
+    /// Creates a new [`Server`] with the following defaults:
+    /// - Certificate (TLS): Generic one bundled for development purposes
+    /// - Address: listens on `0.0.0.0:4043`
+    /// - Routes: Given
+    pub fn new_with(router: impl TRouter) -> Self {
+        Self {
+            cert: None,
+            addr: SocketAddr::from(([0, 0, 0, 0], 4043)),
+            router: vec![Box::new(router)],
+        }
+    }
+
+    pub fn with_address(&mut self, addr: impl Into<SocketAddr>) -> &mut Self {
+        self.addr = addr.into();
         self
     }
 
@@ -66,19 +73,8 @@ impl Server {
         self
     }
 
-    pub fn nest_routes(&mut self, router: Router) -> &mut Self {
-        self.router.nest(router);
-        self
-    }
-
-    pub fn add_route<T, R>(&mut self, route: TypedRoute<T, R>) -> &mut Self
-    where
-        T: FromBody + DeserializeOwned + Send + 'static,
-        serde_json::Error: From<<T as FromBody>::Error>,
-        R: Debug + Send + 'static,
-        Response<R>: ResponseSender,
-    {
-        self.router.add_route(route);
+    pub fn routes(&mut self, router: impl TRouter) -> &mut Self {
+        self.router.push(Box::new(router));
         self
     }
 
@@ -101,7 +97,7 @@ impl Server {
 
             let router = router.clone();
             tokio::spawn(async move {
-                safely_handle_connection(controller, &router.clone()).await;
+                safely_handle_connection(controller, router.deref().as_slice()).await;
             });
         }
         Ok(())

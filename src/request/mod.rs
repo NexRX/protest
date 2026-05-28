@@ -2,6 +2,7 @@ mod body;
 mod builder;
 
 pub use body::*;
+pub use builder::*;
 
 #[cfg(test)]
 mod builder_test;
@@ -11,7 +12,6 @@ mod mod_test;
 use crate::{
     B_ACCEPT_ENCODING, B_AUTHORITY, B_METHOD, B_PATH, B_SCHEME, Encoding, Method, RequestHeaders,
 };
-use builder::*;
 use quiche::h3::NameValue as _;
 use serde::{Deserialize, de::DeserializeOwned};
 use std::{fmt::Debug, path::PathBuf};
@@ -47,10 +47,7 @@ impl RequestStream {
     }
 
     /// Converts body from streamed i-> buffered and deserializes into type
-    pub async fn into_buffered(
-        mut self,
-        capacity: usize,
-    ) -> Result<RequestBuffer, serde_json::Error> {
+    pub async fn into_buffered(mut self, capacity: usize) -> RequestBuffer {
         debug!("Converting body into buffered with capacity {capacity}");
 
         let mut body: Vec<u8> = Vec::with_capacity(capacity);
@@ -62,7 +59,7 @@ impl RequestStream {
             }
         }
 
-        Ok(Request {
+        Request {
             method: self.method,
             path: self.path,
             authority: self.authority,
@@ -70,21 +67,15 @@ impl RequestStream {
             body_assosiated: self.body_assosiated,
             headers: self.headers,
             scheme: self.scheme,
-        })
+        }
     }
 
-    /// Converts body from streamed i-> buffered and deserializes into type
-    pub async fn into_typed_with_json<T>(
-        self,
-        capacity: usize,
-    ) -> Result<Request<T>, serde_json::Error>
+    /// Converts body from streamed -> buffered -> T (deserialized)
+    pub async fn into_buffered_typed<T>(self, capacity: usize) -> Result<Request<T>, T::Error>
     where
         T: FromBody + DeserializeOwned,
-        serde_json::Error: From<<T as FromBody>::Error>,
     {
-        debug!("Converting body into buffered with capacity {capacity}");
-
-        let request = self.into_buffered(capacity).await?;
+        let request = self.into_buffered(capacity).await;
 
         trace!(?request.body, "Deserialzing body");
         let body = T::from_body(&request.body)?;

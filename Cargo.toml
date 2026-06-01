@@ -10,6 +10,11 @@ path = "src/lib.rs"
 [workspace]
 members = ["protest-macros"]
 
+[features]
+default = ["macros"]
+macros = ["dep:protest-macros"]
+test = ["dep:test-context"]
+
 [dependencies]
 bytes = "1.11.1"
 derive_more = { version = "2.1.1", features = ["full"] }
@@ -26,7 +31,19 @@ tokio-stream = "0.1.18"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
+protest-macros = { path = "protest-macros", optional = true }
+test-context = { version = "0.5.8", optional = true }
+
 [dev-dependencies]
+test-context = "0.5.8"
 sqlx = { version = "0.8", features = [ "runtime-tokio", "tls-native-tls", "sqlite" ] }
-test-context =  "0.5.8"
-# test-context = { version = "0.5.8", features = ["tokio-runtime"] }
+
+[[test]]
+name = "simple_service"
+path = "tests/macros/simple_service.rs"
+required-features = ["test"]
+
+[[test]]
+name = "database_service"
+path = "tests/macros/database_service.rs"
+required-features = ["test"]

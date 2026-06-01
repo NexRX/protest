@@ -2455,6 +2455,7 @@ dependencies = [
  "derive_more",
  "futures-util",
  "mime",
+ "protest-macros",
  "quiche",
  "serde",
  "serde_json",

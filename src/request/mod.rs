@@ -46,6 +46,10 @@ impl RequestStream {
         RequestBuilder::new()
     }
 
+    pub fn path_str(&self) -> &str {
+        self.path.to_str().unwrap_or_default()
+    }
+
     /// Converts body from streamed i-> buffered and deserializes into type
     pub async fn into_buffered(mut self, capacity: usize) -> RequestBuffer {
         debug!("Converting body into buffered with capacity {capacity}");
@@ -71,13 +75,13 @@ impl RequestStream {
     }
 
     /// Converts body from streamed -> buffered -> T (deserialized)
-    pub async fn into_buffered_typed<T>(self, capacity: usize) -> Result<Request<T>, T::Error>
+    pub async fn into_buffered_typed<T>(self, capacity: usize) -> Result<Request<T>, FromBodyError>
     where
         T: FromBody + DeserializeOwned,
     {
         let request = self.into_buffered(capacity).await;
 
-        trace!(?request.body, "Deserialzing body");
+        trace!(?request.body, ty=T::content_type_name(), "Deserialzing body");
         let body = T::from_body(&request.body)?;
 
         Ok(Request {

@@ -1,4 +1,4 @@
-use crate::RequestBuilderError;
+use crate::{FromBodyError, RequestBuilderError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
@@ -6,6 +6,8 @@ pub enum ServerError {
     NoRoute,
     #[error("{0}")]
     Request(RequestBuilderError),
+    #[error("Failed to deserialize request: {0}")]
+    RequestDeserialize(FromBodyError),
     #[error("{0}")]
     Generic(Box<dyn std::error::Error>),
 }
@@ -25,5 +27,11 @@ impl From<Box<dyn std::error::Error>> for ServerError {
 impl From<&'static str> for ServerError {
     fn from(value: &'static str) -> Self {
         Self::Generic(value.into())
+    }
+}
+
+impl From<FromBodyError> for ServerError {
+    fn from(value: FromBodyError) -> Self {
+        Self::RequestDeserialize(value)
     }
 }

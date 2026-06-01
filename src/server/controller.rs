@@ -20,6 +20,10 @@ pub async fn handle_connection(
     routers: &[Box<dyn TRouter>],
 ) -> Result<(), ServerError> {
     let mut request: Option<(RequestStream, OutboundFrameSender)> = None;
+    // Set to true once we dispatch early via read_fin on the Headers event, so
+    // that the trailing BodyBytesReceived(fin=true, 0 bytes) that tokio-quiche
+    // still emits can be silently ignored instead of treated as an error.
+    let mut dispatched = false;
 
     while let Some(event) = controller.event_receiver_mut().recv().await {
         match event {
@@ -42,8 +46,15 @@ pub async fn handle_connection(
                     "Request shouldn't have more than one headers event"
                 );
 
-                let incoming_body = incoming_headers.read_fin;
+                let read_fin = incoming_headers.read_fin;
                 request = Some(RequestStream::try_from_incoming(incoming_headers)?);
+
+                // If the headers frame carried FIN the request has no body;
+                // dispatch it immediately instead of waiting for body events.
+                if read_fin {
+                    handle_request_via_iter(request.take().unwrap(), routers).await?;
+                    dispatched = true;
+                }
             }
             ServerH3Event::Core(H3Event::BodyBytesReceived {
                 stream_id,
@@ -58,9 +69,18 @@ pub async fn handle_connection(
                 );
 
                 match (request.is_some(), fin) {
+                    (false, _) if dispatched => {
+                        // Trailing FIN event after the request was already
+                        // dispatched early via read_fin in the headers frame.
+                        trace!(
+                            ?stream_id,
+                            "Http Event (Core) - Ignoring trailing FIN after early dispatch"
+                        );
+                    }
                     (false, _) => Err("Request was consumed in error")?,
                     (true, false) => trace!("Http Event (Core) - Receiving body bytes"),
                     (true, true) => {
+                        dispatched = true;
                         handle_request_via_iter(request.take().unwrap(), routers).await?;
                     }
                 };

@@ -71,11 +71,11 @@ impl Routes {
                 &'a self,
                 request: protest::RequestStream,
                 send: &'a mut tokio_quiche::http3::driver::OutboundFrameSender,
-            ) -> protest::FutureResult<'a, (), protest::ServerError> {
+            ) -> protest::FutureResult<'a, (), protest::ProtestError> {
                 Box::pin(async move {
                     match (request.method, request.path_str()) {
                         #(#route_tuples)*
-                        _ => Err(protest::ServerError::NoRoute),
+                        _ => Err(protest::ProtestError::NoRoute),
                     }
                 })
             }

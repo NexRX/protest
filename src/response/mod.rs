@@ -1,10 +1,12 @@
+mod body;
 #[cfg(test)]
 mod mod_test;
+mod sender;
 
-mod body;
 pub use body::*;
+pub use sender::*;
 
-use crate::{B_CONTENT_TYPE, B_STATUS, ResponseHeaders, Status};
+use crate::{B_CONTENT_LENGTH, B_CONTENT_TYPE, B_STATUS, ResponseHeaders, Status};
 use bytes::Bytes;
 use futures_util::{
     SinkExt as _, StreamExt as _,
@@ -46,15 +48,20 @@ impl<T: ResponseBody> Response<T> {
         headers.insert(0, h3::Header::new(B_STATUS, self.status.bytes().as_ref()));
 
         if self.headers.content_type.is_none()
-            && let Some(content_type) = default_content_type {
-                headers.push(h3::Header::new(
-                    B_CONTENT_TYPE,
-                    content_type.to_string().as_bytes(),
-                ));
-            }
+            && let Some(content_type) = default_content_type
+        {
+            headers.push(h3::Header::new(
+                B_CONTENT_TYPE,
+                content_type.to_string().as_bytes(),
+            ));
+        }
 
-        // let has_response_body =
-        //     self.headers.content_type.is_some() || self.body.default_content_type().is_some();
+        if let Some(size) = self.body.size() {
+            headers.push(h3::Header::new(
+                B_CONTENT_LENGTH,
+                size.to_string().as_bytes(),
+            ));
+        }
 
         send.send(OutboundFrame::Headers(headers, None)).await?;
         Ok(())
@@ -77,9 +84,4 @@ impl ResponseStream {
             body: stream::once(async { Bytes::from_static(b"Internal server error") }).boxed(),
         }
     }
-}
-
-pub struct TypedResponse<T> {
-    pub status: Status,
-    pub body: T,
 }

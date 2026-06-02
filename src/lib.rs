@@ -1,4 +1,3 @@
-mod error;
 mod http;
 #[cfg(any(feature = "test", test))]
 mod integration_test;
@@ -8,7 +7,6 @@ mod router;
 mod server;
 mod types;
 
-pub use error::*;
 pub use http::*;
 #[cfg(any(feature = "test", test))]
 pub use integration_test::*;

@@ -10,7 +10,8 @@ mod builder_test;
 mod mod_test;
 
 use crate::{
-    B_ACCEPT_ENCODING, B_AUTHORITY, B_METHOD, B_PATH, B_SCHEME, Encoding, Method, RequestHeaders,
+    B_ACCEPT_ENCODING, B_AUTHORITY, B_METHOD, B_PATH, B_SCHEME, Encoding, Method, ProtestError,
+    RequestHeaders,
 };
 use quiche::h3::NameValue as _;
 use serde::{Deserialize, de::DeserializeOwned};
@@ -75,7 +76,7 @@ impl RequestStream {
     }
 
     /// Converts body from streamed -> buffered -> T (deserialized)
-    pub async fn into_buffered_typed<T>(self, capacity: usize) -> Result<Request<T>, FromBodyError>
+    pub async fn into_buffered_typed<T>(self, capacity: usize) -> Result<Request<T>, ProtestError>
     where
         T: FromBody + DeserializeOwned,
     {

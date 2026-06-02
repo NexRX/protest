@@ -2,8 +2,7 @@ mod handlers;
 #[cfg(test)]
 mod mod_test;
 
-
-use crate::error::ServerError;
+use crate::ProtestError;
 use crate::{FutureResult, RequestStream};
 use std::fmt::Debug;
 use tokio_quiche::http3::driver::OutboundFrameSender;
@@ -21,5 +20,5 @@ pub trait TRouter: Debug + Send + Sync + 'static {
         &'a self,
         request: RequestStream,
         send: &'a mut OutboundFrameSender,
-    ) -> FutureResult<'a, (), ServerError>;
+    ) -> FutureResult<'a, (), ProtestError>;
 }

@@ -263,17 +263,17 @@ pub struct TestResponse {
 /// # Examples
 ///
 /// **String without header assertions**
-/// ```
+/// ```ignore
 /// assert_response!(res, Ok, [], "Hello, World!");
 /// ```
 ///
 /// **Plain Text**
-/// ```
+/// ```ignore
 /// assert_response!(res, Ok, [("Content-Type", "text/plain")], "Hello, World!");
 /// ```
 ///
 /// **Json**
-/// ```
+/// ```ignore
 /// assert_response!(res, Ok, [("Content-Type", "application/json")], "{}");
 /// ```
 #[macro_export]

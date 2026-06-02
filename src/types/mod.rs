@@ -1,8 +1,12 @@
+mod error;
 mod json;
+mod tls;
 
+pub use error::*;
 pub use json::*;
-use serde::Serialize;
+pub use tls::*;
 
+use serde::Serialize;
 use std::{io, pin::Pin};
 
 pub type AnyError = Box<dyn std::error::Error>;

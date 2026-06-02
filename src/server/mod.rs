@@ -5,9 +5,9 @@ mod mod_test;
 pub(crate) use controller::*;
 
 use crate::TRouter;
+use crate::TlsCertificatePathsOwned;
 use std::env::temp_dir;
 use std::net::SocketAddr;
-use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio_quiche::http3::settings::Http3Settings;
@@ -21,12 +21,6 @@ pub struct Server {
     pub(crate) cert: Option<TlsCertificatePathsOwned>,
     pub(crate) addr: SocketAddr,
     pub(crate) router: Vec<Box<dyn TRouter>>,
-}
-
-pub struct TlsCertificatePathsOwned {
-    pub cert: String,
-    pub private_key: String,
-    pub kind: CertificateKind,
 }
 
 impl Server {
@@ -97,7 +91,7 @@ impl Server {
 
             let router = router.clone();
             tokio::spawn(async move {
-                safely_handle_connection(controller, router.deref().as_slice()).await;
+                safely_handle_connection(controller, router).await;
             });
         }
         Ok(())

@@ -1,4 +1,4 @@
-use crate::{ByteCounter, FromBody, FromBodyError, FutureResult, ResponseBody};
+use crate::{ByteCounter, FromBody, ProtestError, ResponseBody};
 use derive_more::{Deref, DerefMut};
 use mime::Mime;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -16,13 +16,23 @@ pub struct Json<T> {
 }
 
 impl<T: Serialize + Send + 'static> Json<T> {
+    /// Contructs a JSON value which is minified on release builds and pretty formatted on debug
     pub fn new(inner: T) -> Self {
+        Self {
+            inner,
+            pretty: cfg!(debug_assertions),
+        }
+    }
+
+    /// Constructs a JSON value which is always minified
+    pub fn minified(inner: T) -> Self {
         Self {
             inner,
             pretty: false,
         }
     }
 
+    /// Constructs a JSON value which is always pretty formatted
     pub fn pretty(inner: T) -> Self {
         Self {
             inner,
@@ -40,8 +50,8 @@ impl<T: Serialize + Send + 'static> Json<T> {
 }
 
 impl<T: Debug + DeserializeOwned> FromBody for Json<T> {
-    fn from_body(bytes: &[u8]) -> Result<Self, FromBodyError> {
-        serde_json::from_slice(bytes).map_err(FromBodyError::from)
+    fn from_body(bytes: &[u8]) -> Result<Self, ProtestError> {
+        serde_json::from_slice(bytes).map_err(ProtestError::from)
     }
 
     fn content_type() -> Option<Mime> {
@@ -50,8 +60,8 @@ impl<T: Debug + DeserializeOwned> FromBody for Json<T> {
 }
 
 impl<T: Serialize + Send + 'static> ResponseBody for Json<T> {
-    fn send(self, send: &mut OutboundFrameSender) -> FutureResult<'_, ()> {
-        Box::pin(async move { serde_json::to_value(&self.inner)?.send(send).await })
+    async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
+        serde_json::to_value(&self.inner)?.send(send).await
     }
 
     fn size(&self) -> Option<usize> {
@@ -66,5 +76,11 @@ impl<T: Serialize + Send + 'static> ResponseBody for Json<T> {
 impl<T: Serialize> From<Json<T>> for bytes::Bytes {
     fn from(value: Json<T>) -> Self {
         serde_json::to_vec(&value.inner).unwrap().into()
+    }
+}
+
+impl<T: Serialize + Send + 'static> From<T> for Json<T> {
+    fn from(value: T) -> Self {
+        Json::new(value)
     }
 }

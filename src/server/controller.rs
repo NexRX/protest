@@ -1,4 +1,6 @@
-use crate::error::ServerError;
+use std::sync::Arc;
+
+use crate::ProtestError;
 use crate::{RequestStream, Response, ResponseSender, TRouter};
 use tokio_quiche::ServerH3Controller;
 use tokio_quiche::http3::driver::{H3Event, OutboundFrameSender, ServerH3Event};
@@ -7,7 +9,7 @@ use tracing::{debug, error, info, trace, warn};
 #[allow(unused)]
 pub async fn safely_handle_connection(
     controller: ServerH3Controller,
-    routers: &[Box<dyn TRouter>],
+    routers: Arc<Vec<Box<dyn TRouter>>>,
 ) {
     let _ = handle_connection(controller, routers)
         .await
@@ -17,12 +19,10 @@ pub async fn safely_handle_connection(
 #[allow(unused)]
 pub async fn handle_connection(
     mut controller: ServerH3Controller,
-    routers: &[Box<dyn TRouter>],
-) -> Result<(), ServerError> {
+    routers: Arc<Vec<Box<dyn TRouter>>>,
+) -> Result<(), ProtestError> {
+    let routers = routers.as_slice();
     let mut request: Option<(RequestStream, OutboundFrameSender)> = None;
-    // Set to true once we dispatch early via read_fin on the Headers event, so
-    // that the trailing BodyBytesReceived(fin=true, 0 bytes) that tokio-quiche
-    // still emits can be silently ignored instead of treated as an error.
     let mut dispatched = false;
 
     while let Some(event) = controller.event_receiver_mut().recv().await {
@@ -110,7 +110,7 @@ pub async fn handle_connection(
 async fn handle_request_via_iter(
     (request, mut send): (RequestStream, OutboundFrameSender),
     routers: &[Box<dyn TRouter>],
-) -> Result<(), ServerError> {
+) -> Result<(), ProtestError> {
     trace!(?request, "Http Event (Core) - Responding to request");
 
     if let Some(router) = routers
@@ -121,6 +121,8 @@ async fn handle_request_via_iter(
         return Ok(());
     }
 
-    Response::route_not_found().send(&mut send).await?;
+    Response::<String>::new(crate::Status::NotFound, "Route not found".into())
+        .send(&mut send)
+        .await?;
     Ok(())
 }

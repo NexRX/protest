@@ -1,23 +1,10 @@
+use crate::ProtestError;
 use mime::Mime;
 use serde_json::Value;
 use std::fmt::Debug;
 
-#[derive(Debug, thiserror::Error)]
-#[error("Failed to parse body: {message}")]
-pub struct FromBodyError {
-    message: String,
-}
-
-impl From<serde_json::Error> for FromBodyError {
-    fn from(err: serde_json::Error) -> Self {
-        Self {
-            message: err.to_string(),
-        }
-    }
-}
-
 pub trait FromBody: Sized + Debug {
-    fn from_body(bytes: &[u8]) -> Result<Self, FromBodyError>;
+    fn from_body(bytes: &[u8]) -> Result<Self, ProtestError>;
 
     fn content_type() -> Option<Mime>;
 
@@ -27,8 +14,8 @@ pub trait FromBody: Sized + Debug {
 }
 
 impl FromBody for Value {
-    fn from_body(bytes: &[u8]) -> Result<Self, FromBodyError> {
-        serde_json::from_slice(bytes).map_err(FromBodyError::from)
+    fn from_body(bytes: &[u8]) -> Result<Self, ProtestError> {
+        serde_json::from_slice(bytes).map_err(ProtestError::from)
     }
 
     fn content_type() -> Option<Mime> {
@@ -37,7 +24,7 @@ impl FromBody for Value {
 }
 
 impl FromBody for String {
-    fn from_body(bytes: &[u8]) -> Result<Self, FromBodyError> {
+    fn from_body(bytes: &[u8]) -> Result<Self, ProtestError> {
         Ok(String::from_utf8_lossy(bytes).to_string())
     }
 

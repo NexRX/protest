@@ -1,7 +1,6 @@
 use crate::{
     Method::{GET, POST},
-    Response, Status, TRouter,
-    error::ServerError,
+    ProtestError, Response, Status, TRouter,
     integration_test::IntegrationTest,
 };
 use crate::{ResponseSender as _, assert_response};
@@ -47,7 +46,7 @@ impl TRouter for ManualRouter {
         &'a self,
         request: crate::RequestStream,
         send: &'a mut tokio_quiche::http3::driver::OutboundFrameSender,
-    ) -> crate::FutureResult<'a, (), crate::error::ServerError> {
+    ) -> crate::FutureResult<'a, (), crate::ProtestError> {
         Box::pin(async move {
             match (request.path_str(), request.method) {
                 ("/sync", GET) => {
@@ -61,7 +60,7 @@ impl TRouter for ManualRouter {
                     Response::new(Status::OK, response_body).send(send).await?;
                     Ok(())
                 }
-                _ => Err(ServerError::NoRoute),
+                _ => Err(ProtestError::NoRoute),
             }
         })
     }

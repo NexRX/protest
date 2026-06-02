@@ -1,49 +1,35 @@
-use crate::{ByteCounter, FutureResult, Response};
+use crate::{ByteCounter, ProtestError};
 use bytes::Bytes;
-use futures_util::{SinkExt as _, stream::BoxStream};
+use futures_util::{SinkExt, stream::BoxStream};
 use mime::Mime;
+use std::future::Future;
 use tokio_quiche::http3::driver::{OutboundFrame, OutboundFrameSender};
 use tokio_stream::StreamExt as _;
 
-pub trait ResponseSender {
-    fn send(self, send: &mut OutboundFrameSender) -> FutureResult<'_, ()>;
-}
-
-impl<T> ResponseSender for Response<T>
-where
-    T: ResponseBody,
-{
-    fn send(mut self, send: &mut OutboundFrameSender) -> FutureResult<'_, ()> {
-        Box::pin(async move {
-            self.send_headers(send, self.body.default_content_type())
-                .await?;
-            self.body.send(send).await?;
-            Ok(())
-        })
-    }
-}
-
-// ---------- ResponseBody ----------
-
 pub trait ResponseBody: Send + 'static {
     /// Sends the body to the client.
-    fn send(self, send: &mut OutboundFrameSender) -> FutureResult<'_, ()>;
+    fn send(
+        self,
+        send: &mut OutboundFrameSender,
+    ) -> impl Future<Output = Result<(), ProtestError>> + Send;
     /// Size in bytes of the body.
     fn size(&self) -> Option<usize>;
     /// Default content type of the body. Send in response if not sent manually.
     fn default_content_type(&self) -> Option<Mime>;
+
+    fn is_empty(&self) -> bool {
+        self.size().is_none_or(|s| s == 0)
+    }
 }
 
 impl ResponseBody for BoxStream<'static, Bytes> {
-    fn send(self, send: &mut OutboundFrameSender) -> FutureResult<'_, ()> {
-        Box::pin(async move {
-            let mut peekable = self.peekable();
-            while let Some(chunk) = peekable.next().await {
-                let fin = peekable.peek().await.is_none();
-                send.send(OutboundFrame::Body(chunk, fin)).await?;
-            }
-            Ok(())
-        })
+    async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
+        let mut peekable = self.peekable();
+        while let Some(chunk) = peekable.next().await {
+            let fin = peekable.peek().await.is_none();
+            send.send(OutboundFrame::Body(chunk, fin)).await?
+        }
+        Ok(())
     }
 
     fn size(&self) -> Option<usize> {
@@ -56,13 +42,10 @@ impl ResponseBody for BoxStream<'static, Bytes> {
 }
 
 impl ResponseBody for Vec<u8> {
-    fn send(self, send: &mut OutboundFrameSender) -> FutureResult<'_, ()> {
-        Box::pin(async move {
-            let body = serde_json::to_string(&self)
-                .map_err(|err| format!("Failed to serialize JSON body: {err}"))?;
-            send.send(OutboundFrame::Body(body.into(), true)).await?;
-            Ok(())
-        })
+    async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
+        let body = serde_json::to_string(&self)?;
+        send.send(OutboundFrame::Body(body.into(), true)).await?;
+        Ok(())
     }
 
     fn size(&self) -> Option<usize> {
@@ -75,13 +58,10 @@ impl ResponseBody for Vec<u8> {
 }
 
 impl ResponseBody for serde_json::Value {
-    fn send(self, send: &mut OutboundFrameSender) -> FutureResult<'_, ()> {
-        Box::pin(async move {
-            let body = serde_json::to_vec(&self)
-                .map_err(|err| format!("Failed to serialize JSON body: {err}"))?;
-            send.send(OutboundFrame::Body(body.into(), true)).await?;
-            Ok(())
-        })
+    async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
+        let body = serde_json::to_vec(&self)?;
+        send.send(OutboundFrame::Body(body.into(), true)).await?;
+        Ok(())
     }
 
     fn size(&self) -> Option<usize> {
@@ -94,11 +74,9 @@ impl ResponseBody for serde_json::Value {
 }
 
 impl ResponseBody for String {
-    fn send(self, send: &mut OutboundFrameSender) -> FutureResult<'_, ()> {
-        Box::pin(async move {
-            send.send(OutboundFrame::Body(self.into(), true)).await?;
-            Ok(())
-        })
+    async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
+        send.send(OutboundFrame::Body(self.into(), true)).await?;
+        Ok(())
     }
 
     fn size(&self) -> Option<usize> {
@@ -111,11 +89,9 @@ impl ResponseBody for String {
 }
 
 impl ResponseBody for &'static str {
-    fn send(self, send: &mut OutboundFrameSender) -> FutureResult<'_, ()> {
-        Box::pin(async move {
-            send.send(OutboundFrame::Body(self.into(), true)).await?;
-            Ok(())
-        })
+    async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
+        send.send(OutboundFrame::Body(self.into(), true)).await?;
+        Ok(())
     }
 
     fn size(&self) -> Option<usize> {
@@ -128,11 +104,9 @@ impl ResponseBody for &'static str {
 }
 
 impl ResponseBody for () {
-    fn send(self, send: &mut OutboundFrameSender) -> FutureResult<'_, ()> {
-        Box::pin(async move {
-            send.send(OutboundFrame::Body("".into(), true)).await?;
-            Ok(())
-        })
+    async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
+        send.send(OutboundFrame::Body("".into(), true)).await?;
+        Ok(())
     }
 
     fn size(&self) -> Option<usize> {
@@ -145,13 +119,11 @@ impl ResponseBody for () {
 }
 
 impl<T: ResponseBody, E: ResponseBody> ResponseBody for Result<T, E> {
-    fn send(self, send: &mut OutboundFrameSender) -> FutureResult<'_, ()> {
-        Box::pin(async move {
-            match self {
-                Ok(ok) => ok.send(send).await,
-                Err(err) => err.send(send).await,
-            }
-        })
+    async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
+        match self {
+            Ok(ok) => ok.send(send).await,
+            Err(err) => err.send(send).await,
+        }
     }
 
     fn size(&self) -> Option<usize> {

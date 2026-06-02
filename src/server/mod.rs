@@ -1,6 +1,4 @@
 mod controller;
-#[cfg(test)]
-mod mod_test;
 
 pub(crate) use controller::*;
 

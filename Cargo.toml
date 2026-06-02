@@ -48,3 +48,8 @@ required-features = ["test"]
 name = "database_service"
 path = "tests/macros/database_service.rs"
 required-features = ["test"]
+
+[[test]]
+name = "router"
+path = "tests/router.rs"
+required-features = ["test"]

@@ -1,6 +1,4 @@
 mod handlers;
-#[cfg(test)]
-mod mod_test;
 
 use crate::ProtestError;
 use crate::{FutureResult, RequestStream};

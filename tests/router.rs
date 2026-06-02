@@ -1,9 +1,9 @@
-use crate::{
+use protest::{
+    FutureResult,
     Method::{GET, POST},
-    ProtestError, Response, Status, TRouter,
-    integration_test::IntegrationTest,
+    ProtestError, RequestStream, Response, ResponseSender as _, Status, TRouter, assert_response,
+    IntegrationTest,
 };
-use crate::{ResponseSender as _, assert_response};
 use std::sync::Mutex;
 use test_context::test_context;
 
@@ -30,7 +30,7 @@ impl ManualRouter {
 }
 
 impl TRouter for ManualRouter {
-    fn can_handle_request(&self, request: &crate::RequestStream) -> bool {
+    fn can_handle_request(&self, request: &RequestStream) -> bool {
         match (request.path_str(), request.method) {
             ("/sync", GET) => true,
             ("/async", POST) => true,
@@ -44,9 +44,9 @@ impl TRouter for ManualRouter {
 
     fn handle_request<'a>(
         &'a self,
-        request: crate::RequestStream,
+        request: RequestStream,
         send: &'a mut tokio_quiche::http3::driver::OutboundFrameSender,
-    ) -> crate::FutureResult<'a, (), crate::ProtestError> {
+    ) -> FutureResult<'a, (), ProtestError> {
         Box::pin(async move {
             match (request.path_str(), request.method) {
                 ("/sync", GET) => {

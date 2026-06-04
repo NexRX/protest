@@ -140,3 +140,33 @@ impl<T: ResponseBody, E: ResponseBody> ResponseBody for Result<T, E> {
         }
     }
 }
+macro_rules! impl_for_to_string {
+    ($self:ty) => {
+        impl ResponseBody for $self {
+            async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
+                send.send(OutboundFrame::Body(self.to_string().into(), true))
+                    .await?;
+                Ok(())
+            }
+
+            fn size(&self) -> Option<usize> {
+                Some(self.to_string().len())
+            }
+
+            fn default_content_type(&self) -> Option<Mime> {
+                Some(mime::TEXT_PLAIN_UTF_8)
+            }
+        }
+    };
+}
+
+impl_for_to_string!(usize);
+impl_for_to_string!(u16);
+impl_for_to_string!(u32);
+impl_for_to_string!(u64);
+impl_for_to_string!(u128);
+impl_for_to_string!(i8);
+impl_for_to_string!(i16);
+impl_for_to_string!(i32);
+impl_for_to_string!(i64);
+impl_for_to_string!(i128);

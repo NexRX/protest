@@ -9,6 +9,12 @@ pub enum ProtestError {
     NoRoute,
     #[error("{0}")]
     Request(RequestBuilderError),
+    #[error("The path parameter `{path_param}` was found={found}, invalid={invalid}")]
+    RequestPath {
+        path_param: String,
+        found: bool,
+        invalid: bool,
+    },
     #[error("Failed to (de)serialize while processing the request: {0}")]
     Serde(serde_json::error::Error),
     #[error("Failed to send response object: {0}")]

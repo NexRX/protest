@@ -1,9 +1,10 @@
-use crate::args::RouteArgs;
+use crate::{args::RouteArgs, service::path::PathParam};
 use darling::FromMeta;
 use proc_macro_error2::abort;
 use proc_macro2::TokenStream;
-use quote::quote;
-use syn::{Attribute, FnArg, ImplItem, ImplItemFn, ItemImpl, PatType};
+use quote::{quote, quote_spanned};
+use syn::spanned::Spanned;
+use syn::{Attribute, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, Pat, PatType, Receiver};
 
 pub struct Routes(Vec<Route>);
 
@@ -45,8 +46,8 @@ impl Routes {
         let route_tuples: Vec<TokenStream> = self.0.iter().map(Route::gen_match_tuple).collect();
 
         quote! {
-            fn can_handle_request(&self, request: &protest::RequestStream) -> bool {
-                match (request.method, request.path_str()) {
+            fn can_handle_request(&self, request_: &protest::RequestStream) -> bool {
+                match (request_.method, request_.path_str()) {
                     #(#route_tuples => true,)*
                     _ => false,
                 }
@@ -69,11 +70,11 @@ impl Routes {
         quote! {
             fn handle_request<'a>(
                 &'a self,
-                request: protest::RequestStream,
+                request_: protest::RequestStream,
                 send: &'a mut tokio_quiche::http3::driver::OutboundFrameSender,
             ) -> protest::FutureResult<'a, (), protest::ProtestError> {
                 Box::pin(async move {
-                    match (request.method, request.path_str()) {
+                    match (request_.method, request_.path_str()) {
                         #(#route_tuples)*
                         _ => Err(protest::ProtestError::NoRoute),
                     }
@@ -84,8 +85,8 @@ impl Routes {
 }
 
 pub(super) struct Route {
-    args: RouteArgs,
-    method: ImplItemFn,
+    pub args: RouteArgs,
+    pub method: ImplItemFn,
 }
 
 impl Route {
@@ -114,7 +115,7 @@ impl Route {
         let path = &self.args.path;
         let method_ident = &self.args.method;
         quote! {
-            (protest::Method::#method_ident, #path)
+            (protest::Method::#method_ident, _) if protest::PathMatcher::from(#path).matches(&request_.path)
         }
     }
 
@@ -122,42 +123,46 @@ impl Route {
     pub fn gen_match_handler(&self) -> TokenStream {
         let match_tuple = self.gen_match_tuple();
         let fn_ident = &self.method.sig.ident;
-        let conditional_await = self.method.sig.asyncness.is_some().then(|| quote! {.await});
         let reponse_turbo_fish = match &self.method.sig.output {
             syn::ReturnType::Default => quote! {::},
             syn::ReturnType::Type(_, ty) => quote! {::<#ty>::},
         };
 
-        match self.body_ty() {
-            Some(body_ty) => {
-                let fn_call = if self.has_receiver() {
-                    quote! { self.#fn_ident(request.body)#conditional_await }
-                } else {
-                    quote! { Self::#fn_ident(request.body)#conditional_await }
-                };
-                let body_ty = &body_ty.ty;
-                quote! {
-                    #match_tuple => {
-                        let request = request.into_buffered_typed::<#body_ty>(0).await?;
-                        let response_body = #fn_call;
-                        protest::Response #reponse_turbo_fish new(protest::Status::OK, response_body).send(send).await?;
-                        Ok(())
-                    }
+        let fn_call = self.gen_fn_call(fn_ident);
+
+        // Generate a trait bound assertion that points the error at the return type span
+        let response_body_assert = match &self.method.sig.output {
+            syn::ReturnType::Type(_, ty) => {
+                let assert_fn_ident = quote::format_ident!("_assert_response_body_{}", fn_ident);
+                quote_spanned! {ty.span()=>
+                    #[allow(unused)]
+                    fn #assert_fn_ident() where #ty: protest::ResponseBody {}
                 }
             }
-            None => {
-                let fn_call = if self.has_receiver() {
-                    quote! { self.#fn_ident()#conditional_await }
-                } else {
-                    quote! { Self::#fn_ident()#conditional_await }
-                };
-                quote! {
-                    #match_tuple => {
-                        let response_body = #fn_call;
-                        protest::Response::new(protest::Status::OK, response_body).send(send).await?;
-                        Ok(())
-                    }
-                }
+            syn::ReturnType::Default => quote! {},
+        };
+
+        quote! {
+            #match_tuple => {
+                #response_body_assert
+                let response_body = #fn_call;
+                protest::Response #reponse_turbo_fish new(protest::Status::OK, response_body).send(send).await?;
+                Ok(())
+            }
+        }
+    }
+
+    fn gen_fn_call(&self, fn_ident: &Ident) -> TokenStream {
+        let conditional_await = self.method.sig.asyncness.is_some().then(|| quote! {.await});
+        let inputs = RouteHandlerInputs::from_route(self);
+        let pre_call = RouteHandlerInputs::gen_pre_fn_call(&inputs);
+        let fn_args = RouteHandlerInputs::gen_fn_call_inputs(&inputs);
+        let receiver = RouteHandlerInputs::gen_fn_receiver_tokens(&inputs);
+
+        quote! {
+            {
+                #pre_call
+                #receiver #fn_ident(#fn_args)#conditional_await
             }
         }
     }
@@ -167,35 +172,164 @@ impl Route {
         attr.path().is_ident("service")
     }
 
-    fn body_ty(&self) -> Option<&PatType> {
-        let args = self.named_args();
-        if args.len() > 1 {
-            let first_extra = args.iter().skip(1).next().unwrap();
-            abort!(
-                first_extra.ty,
-                "Only none or one arg is supported currently and it must be the request body"
-            );
-        }
-        args.first().map(|v| &**v)
-    }
-
-    fn has_receiver(&self) -> bool {
-        self.method
-            .sig
-            .inputs
-            .iter()
-            .any(|arg| matches!(arg, FnArg::Receiver(_)))
-    }
-
-    fn named_args(&self) -> Vec<&PatType> {
-        self.method
-            .sig
-            .inputs
-            .iter()
-            .filter_map(|v| match v {
-                FnArg::Receiver(_) => None,
-                FnArg::Typed(pat_type) => Some(pat_type),
+    fn named_path_params(&self) -> Vec<(usize, String)> {
+        self.args
+            .path
+            .split('/')
+            .enumerate()
+            .filter_map(|(path_position, segment)| {
+                if segment.starts_with(':') {
+                    Some((path_position, segment[1..].to_string()))
+                } else {
+                    None
+                }
             })
             .collect::<Vec<_>>()
+    }
+}
+
+pub enum RouteHandlerInputs {
+    /// i.e. `&self`
+    Receiver(Receiver),
+    Body {
+        #[allow(unused)]
+        fn_position: usize,
+        pat_type: PatType,
+    },
+    PathParam(PathParam),
+}
+
+impl RouteHandlerInputs {
+    pub fn from_route(route: &Route) -> Vec<Self> {
+        let path_params = route.named_path_params();
+
+        route
+            .method
+            .sig
+            .inputs
+            .iter()
+            .enumerate()
+            .map(|(fn_position, input)| match input {
+                // match self
+                FnArg::Receiver(receiver) => Self::Receiver(receiver.to_owned()),
+                // match body
+                FnArg::Typed(pat_type) if Self::is_body(&pat_type) => Self::Body {
+                    fn_position,
+                    pat_type: pat_type.clone(),
+                },
+                // match path
+                FnArg::Typed(pat_type) if Self::is_path_param(&pat_type, &path_params) => Self::PathParam(PathParam::from_pat_type(fn_position, &pat_type, &path_params)),
+                unsupported => abort!(unsupported, "Unsupported arguement because it couldn't be identified as one of the follow args: `self`, `body: T` / `#[body] arg: T`, `path_name: T` / `#[path(\"name\")] arg: T`"),
+            })
+            .collect()
+    }
+
+    pub fn gen_pre_fn_call(inputs: &[Self]) -> TokenStream {
+        inputs
+            .iter()
+            .map(|input| match input {
+                RouteHandlerInputs::Receiver(_) => quote! {},
+                RouteHandlerInputs::Body {
+                    pat_type,
+                    ..
+                } => {
+                    //
+                    let name =  if let Pat::Ident(pat_ident) = &*pat_type.pat {
+                        &pat_ident.ident
+                    } else {
+                        abort!(pat_type, "Expect body fn argument to be known by an Ident i.e. `body: T` where `body` is the ident");
+                    };
+
+                    let body_ty = &pat_type.ty;
+                    quote! {
+                        let request_ = request_.into_buffered_typed::<#body_ty>(0).await?;
+                        let #name = request_.body;
+                    }
+                }
+                RouteHandlerInputs::PathParam(path_param) => {
+                    let name = &path_param.name;
+                    let name_str = path_param.name.to_string();
+
+                    let param_ty = &path_param.fn_type.ty;
+                    let path_param_position = path_param.path_position;
+                    quote! {
+                        let #name: String = request_
+                            .path
+                            .to_string_lossy()
+                            .split('/')
+                            .nth(#path_param_position)
+                            .ok_or(protest::ProtestError::RequestPath {
+                                path_param: #name_str.to_string(),
+                                found: false,
+                                invalid: false,
+                            })?
+                            .into();
+                        let #name = <String as Into<#param_ty>>::into(#name);
+                    }
+                },
+            })
+            .collect()
+    }
+
+    pub fn gen_fn_call_inputs(inputs: &[Self]) -> TokenStream {
+        inputs
+            .iter()
+            .filter(|v| !matches!(v, Self::Receiver(_)))
+            .map(|input| {
+                let name = input.name();
+                quote! {#name}
+            })
+            .reduce(|a, b| quote! {#a, #b})
+            .unwrap_or_default()
+    }
+
+    pub fn gen_fn_receiver_tokens(inputs: &[Self]) -> TokenStream {
+        inputs
+            .iter()
+            .find(|v| matches!(v, Self::Receiver(_)))
+            .map_or(quote! { Self::}, |v| match v {
+                Self::Receiver(f) => {
+                    let self_token = &f.self_token;
+                    quote! {#self_token.}
+                }
+                _ => unreachable!(),
+            })
+    }
+
+    pub fn name(&self) -> Ident {
+        match self {
+            RouteHandlerInputs::Receiver(r) => Ident::new("self", r.self_token.span),
+            RouteHandlerInputs::Body { pat_type, .. } => {
+                if let Pat::Ident(pat_ident) = &*pat_type.pat {
+                    pat_ident.ident.clone()
+                } else {
+                    abort!(
+                        pat_type,
+                        "Expect body fn argument to be known by an Ident i.e. `body: T` where `body` is the ident"
+                    );
+                }
+            }
+            RouteHandlerInputs::PathParam(path_param) => path_param.name.clone(),
+        }
+    }
+
+    pub fn is_body(pat_type: &PatType) -> bool {
+        if let Pat::Ident(ident) = &*pat_type.pat {
+            let is_attributed_body = ident.attrs.iter().any(|attr| attr.path().is_ident("body"));
+            let is_ident_body = ident.ident == "body";
+            is_attributed_body || is_ident_body
+        } else {
+            false
+        }
+    }
+
+    pub fn is_path_param(pat_type: &PatType, path_params: &[(usize, String)]) -> bool {
+        if let Pat::Ident(ident) = &*pat_type.pat {
+            let is_attributed_body = ident.attrs.iter().any(|attr| attr.path().is_ident("path"));
+            let is_ident_path_param = path_params.iter().any(|(_, name)| ident.ident == name);
+            is_attributed_body || is_ident_path_param
+        } else {
+            false
+        }
     }
 }

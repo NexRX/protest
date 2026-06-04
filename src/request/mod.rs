@@ -1,8 +1,10 @@
 mod body;
 mod builder;
+mod path;
 
-pub use body::*;
+pub use body::*; 
 pub use builder::*;
+pub use path::*;
 
 use crate::{
     B_ACCEPT_ENCODING, B_AUTHORITY, B_METHOD, B_PATH, B_SCHEME, Encoding, Method, ProtestError,

@@ -43,8 +43,7 @@ impl ResponseBody for BoxStream<'static, Bytes> {
 
 impl ResponseBody for Vec<u8> {
     async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
-        let body = serde_json::to_string(&self)?;
-        send.send(OutboundFrame::Body(body.into(), true)).await?;
+        send.send(OutboundFrame::Body(self.into(), true)).await?;
         Ok(())
     }
 

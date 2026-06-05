@@ -213,10 +213,12 @@ impl IntegrationTest {
         static ONCE_INIT: OnceLock<()> = OnceLock::new();
 
         ONCE_INIT.get_or_init(|| {
-            tracing_subscriber::fmt()
-                .with_env_filter(tracing_subscriber::EnvFilter::new("protest=trace"))
-                .with_target(true)
-                .init();
+            if std::env::var("TEST_LOG").is_ok() {
+                tracing_subscriber::fmt()
+                    .with_env_filter(tracing_subscriber::EnvFilter::new("protest=trace"))
+                    .with_target(true)
+                    .init();
+            }
         });
     }
 

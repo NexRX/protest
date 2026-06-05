@@ -1,7 +1,14 @@
 ## Testing
 
+All tests:
 ```sh
-cargo test --features test
+cargo test --all-features
+```
+
+with logs set `TEST_LOG=1` environment variable:
+
+```sh
+TEST_LOG=1 cargo test --all-features
 ```
 
 To run a specific test from `tests/macros`:

@@ -145,6 +145,69 @@ impl IntegrationTest {
                 .expect("failed to write request body");
         }
 
+        Self::recv_response(controller).await
+    }
+
+    /// Like [`send`], but splits the body into fixed-size chunks sent as
+    /// separate DATA frames.  The last chunk carries FIN.  This exercises the
+    /// `(true, false)` arm in the controller's `BodyBytesReceived` handler.
+    pub async fn send_chunked(
+        &mut self,
+        method: Method,
+        path: &str,
+        body: impl Into<Bytes>,
+        chunk_size: usize,
+        request_id: u64,
+    ) -> TestResponse {
+        assert!(chunk_size > 0, "chunk_size must be > 0");
+
+        if self.server_handle.is_none() {
+            self.start().await;
+        }
+        if self.client.is_none() {
+            self.client = Some(self.new_client().await);
+        }
+        let (_, controller) = self.client.as_mut().unwrap();
+
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        controller
+            .request_sender()
+            .send(NewClientRequest {
+                request_id,
+                headers: vec![
+                    h3::Header::new(b":method", method.as_bytes()),
+                    h3::Header::new(b":path", path.as_bytes()),
+                    h3::Header::new(b":scheme", b"https"),
+                    h3::Header::new(b":authority", b"localhost"),
+                ],
+                body_writer: Some(tx),
+            })
+            .expect("failed to enqueue request");
+
+        let body_bytes: Bytes = body.into();
+        // Spawn the chunked body writes in a background task so they can
+        // make progress concurrently with the QUIC driver (which may need
+        // the client to poll events before accepting more data).
+        tokio::spawn(async move {
+            let mut outbound = rx.await.expect("body_writer sender dropped");
+            let total = body_bytes.len();
+            let mut offset = 0;
+            while offset < total {
+                let end = (offset + chunk_size).min(total);
+                let fin = end == total;
+                let chunk = body_bytes.slice(offset..end);
+                outbound
+                    .send(OutboundFrame::Body(chunk, fin))
+                    .await
+                    .expect("failed to write body chunk");
+                offset = end;
+            }
+        });
+
+        Self::recv_response(controller).await
+    }
+
+    async fn recv_response(controller: &mut ClientH3Controller) -> TestResponse {
         loop {
             match controller.event_receiver_mut().recv().await {
                 Some(ClientH3Event::Core(H3Event::IncomingHeaders(incoming))) => {

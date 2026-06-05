@@ -1,8 +1,7 @@
 use protest::{
-    FutureResult,
+    FutureResult, IntegrationTest,
     Method::{GET, POST},
     ProtestError, RequestStream, Response, ResponseSender as _, Status, TRouter, assert_response,
-    IntegrationTest,
 };
 use std::sync::Mutex;
 use test_context::test_context;
@@ -64,6 +63,23 @@ impl TRouter for ManualRouter {
             }
         })
     }
+}
+
+#[test_context(IntegrationTest)]
+#[tokio::test]
+async fn test_chunked_post_body_is_received(test: &mut IntegrationTest) {
+    test.server().routes(ManualRouter::new());
+
+    // Send a POST body split into 5-byte chunks.  This forces multiple
+    // BodyBytesReceived events with fin=false before the final fin=true,
+    // exercising the (true, false) arm in the controller.
+    let body = "hello world, this is a chunked body!";
+    let res = test.send_chunked(POST, "/async", body, 5, 1).await;
+    assert_response!(res, OK, [], "");
+
+    // Read back the stored body to prove every chunk was collected.
+    let res = test.send(GET, "/sync", None::<&[u8]>, 2).await;
+    assert_response!(res, OK, [], body);
 }
 
 #[test_context(IntegrationTest)]

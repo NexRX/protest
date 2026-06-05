@@ -7,17 +7,12 @@ use std::{
 pub struct PathMatcher<'a>(Vec<PathComponent<'a>>);
 
 impl PathMatcher<'_> {
-    pub fn matches(&self, path: &Path) -> bool {
-        let mut components = path.iter();
-
-        // Skip the root "/" component that Path::iter() produces for
-        // absolute paths, since our matcher components never include it.
-        if let Some(first) = components.clone().next() {
-            if first == "/" {
-                components.next();
-            }
+    pub fn matches(&self, path: &str) -> bool {
+        if self.0.is_empty() && path == "/" {
+            return true;
         }
 
+        let mut components = path.split("/").filter(|c| !c.is_empty());
         for component in &self.0 {
             match components.next() {
                 Some(actual) if component != actual => {
@@ -30,7 +25,6 @@ impl PathMatcher<'_> {
             }
         }
 
-        // Ensure all path components were consumed (no trailing segments).
         components.next().is_none()
     }
 }
@@ -326,21 +320,21 @@ mod tests {
     #[test]
     fn test_root_path_matches() {
         let matcher = PathMatcher::from("/");
-        assert!(matcher.matches(Path::new("/")));
+        assert!(matcher.matches("/"));
     }
 
     #[test]
     fn test_root_path_does_not_match_subpath() {
         let matcher = PathMatcher::from("/");
-        assert!(!matcher.matches(Path::new("/foo")));
+        assert!(!matcher.matches("/foo"));
     }
 
     #[test]
     fn test_absolute_path_with_param_matches() {
         let matcher = PathMatcher::from("/user/string/:name");
-        assert!(matcher.matches(Path::new("/user/string/john")));
-        assert!(matcher.matches(Path::new("/user/string/smith")));
-        assert!(!matcher.matches(Path::new("/user/string")));
-        assert!(!matcher.matches(Path::new("/user/string/john/extra")));
+        assert!(matcher.matches("/user/string/john"));
+        assert!(matcher.matches("/user/string/smith"));
+        assert!(!matcher.matches("/user/string"));
+        assert!(!matcher.matches("/user/string/john/extra"));
     }
 }

@@ -12,7 +12,7 @@ use crate::{
 };
 use quiche::h3::NameValue as _;
 use serde::{Deserialize, de::DeserializeOwned};
-use std::{fmt::Debug, path::PathBuf};
+use std::fmt::Debug;
 use tokio_quiche::http3::driver::{
     InboundFrame, InboundFrameStream, IncomingH3Headers, OutboundFrameSender,
 };
@@ -26,7 +26,7 @@ pub struct Request<T: Debug> {
     /// The HTTP method of the request (e.g., GET, POST).
     pub method: Method,
     /// The path of the request (e.g., "/index.html").
-    pub path: PathBuf,
+    pub path: String,
     /// The authority of the request, essentially the server host (e.g., "www.example.com").
     pub authority: String,
     /// The scheme of the request, almost always "https".
@@ -45,7 +45,7 @@ impl RequestStream {
     }
 
     pub fn path_str(&self) -> &str {
-        self.path.to_str().unwrap_or_default()
+        self.path.as_str()
     }
 
     /// Converts body from streamed i-> buffered and deserializes into type
@@ -111,7 +111,7 @@ impl RequestStream {
                     request.method(Method::try_from(&header)?);
                 }
                 B_PATH => {
-                    request.path(PathBuf::from(RequestHeaders::try_to_owned(&header)?.1));
+                    request.path(String::from(RequestHeaders::try_to_owned(&header)?.1));
                 }
                 B_SCHEME => {
                     request.scheme(RequestHeaders::try_to_owned(&header)?.1);
@@ -152,7 +152,7 @@ mod tests {
     fn request_buffer_fields_are_accessible() {
         let req: Request<Vec<u8>> = Request {
             method: Method::POST,
-            path: PathBuf::from("/api/data"),
+            path: "/api/data".to_string(),
             authority: "api.example.com".to_string(),
             scheme: "https".to_string(),
             headers: RequestHeaders::default(),
@@ -172,7 +172,7 @@ mod tests {
     fn request_default_headers_are_empty() {
         let req: Request<Vec<u8>> = Request {
             method: Method::GET,
-            path: PathBuf::from("/"),
+            path: "/".to_string(),
             authority: "localhost".to_string(),
             scheme: "https".to_string(),
             headers: RequestHeaders::default(),

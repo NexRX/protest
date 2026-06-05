@@ -255,7 +255,6 @@ impl RouteHandlerInputs {
                     quote! {
                         let #name: String = request_
                             .path
-                            .to_string_lossy()
                             .split('/')
                             .nth(#path_param_position)
                             .ok_or(protest::ProtestError::RequestPath {

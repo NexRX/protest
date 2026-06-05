@@ -1,13 +1,12 @@
 use crate::{Method, ParseHeaderError, Request, RequestHeaders};
 use std::fmt::Debug;
-use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct RequestBuilder<T: Debug> {
     /// The HTTP method of the request (e.g., GET, POST).
     pub method: Method,
     /// The path of the request (e.g., "/index.html").
-    pub path: Option<PathBuf>,
+    pub path: Option<String>,
     /// The authority of the request, essentially the server host (e.g., "www.example.com").
     pub authority: Option<String>,
     /// The scheme of the request, almost always "https".
@@ -48,7 +47,7 @@ impl<T: Debug> RequestBuilder<T> {
         self
     }
 
-    pub fn path(&mut self, path: impl Into<PathBuf>) -> &mut Self {
+    pub fn path(&mut self, path: impl Into<String>) -> &mut Self {
         self.path = Some(path.into());
         self
     }

@@ -2,7 +2,7 @@ mod body;
 mod builder;
 mod path;
 
-pub use body::*; 
+pub use body::*;
 pub use builder::*;
 pub use path::*;
 
@@ -99,7 +99,7 @@ impl RequestStream {
         let mut request = Self::builder();
         request
             .body(incoming.recv)
-            .body_assosiated(incoming.read_fin);
+            .body_assosiated(!incoming.read_fin);
 
         for header in incoming.headers {
             match header.name() {

@@ -1,5 +1,5 @@
-mod routes;
 mod path;
+mod routes;
 
 use crate::service::routes::Routes;
 use proc_macro2::TokenStream;
@@ -13,6 +13,7 @@ pub fn expand(_attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream>
 
     let attrs = &impl_block.attrs;
     let generics = &impl_block.generics;
+    let (impl_generics, _ty_generics, where_clause) = generics.split_for_impl();
     let trait_tokens = trait_tokens(&impl_block);
     let cleaned_items = gen_cleaned_items(&impl_block);
 
@@ -26,11 +27,11 @@ pub fn expand(_attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream>
 
         // Original impl block, `#[service]` attrs removed from methods.
         #(#attrs)*
-        impl #generics #trait_tokens #service_ty {
+        impl #impl_generics #trait_tokens #service_ty #where_clause {
             #(#cleaned_items)*
         }
 
-        impl protest::TRouter for #service_ty {
+        impl #impl_generics protest::TRouter for #service_ty #where_clause {
             #fn_can_handle_request
             #fn_len
             #fn_handle_request

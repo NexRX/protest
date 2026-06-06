@@ -56,6 +56,11 @@ path = "tests/macros/path_param.rs"
 required-features = ["test"]
 
 [[test]]
+name = "generics_service"
+path = "tests/macros/generics_service.rs"
+required-features = ["test"]
+
+[[test]]
 name = "router"
 path = "tests/router.rs"
 required-features = ["test"]

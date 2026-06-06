@@ -4,7 +4,6 @@ use proc_macro_error2::abort;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned};
 use syn::spanned::Spanned;
-use syn::token::Type;
 use syn::{Attribute, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, Pat, PatType, Receiver};
 
 pub struct Routes(Vec<Route>);

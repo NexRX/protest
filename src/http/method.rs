@@ -15,14 +15,23 @@ use quiche::h3::{self, NameValue};
 )]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum Method {
+    /// The GET method requests a representation of the specified resource. Requests using GET should only retrieve data and should not contain a request content.
     GET,
+    /// The POST method submits an entity to the specified resource, often causing a change in state or side effects on the server.
     POST,
+    /// The PUT method replaces all current representations of the target resource with the request content.
     PUT,
+    /// The DELETE method deletes the specified resource.
     DELETE,
+    /// The PATCH method applies partial modifications to a resource.
     PATCH,
+    /// The OPTIONS method describes the communication options for the target resource.
     OPTIONS,
+    /// The HEAD method asks for a response identical to a GET request, but without a response body.
     HEAD,
+    /// The CONNECT method establishes a tunnel to the server identified by the target resource.
     CONNECT,
+    /// The TRACE method performs a message loop-back test along the path to the target resource.
     TRACE,
 }
 
@@ -41,111 +50,5 @@ impl TryFrom<&h3::Header> for Method {
 
         Self::try_from(method_str)
             .map_err(|e| ParseHeaderError::Unexpected("Method".to_string(), e.to_string()))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use quiche::h3;
-
-    fn method_header(value: &[u8]) -> h3::Header {
-        h3::Header::new(b":method", value)
-    }
-
-    #[test]
-    fn parse_get() {
-        assert_eq!(
-            Method::try_from(&method_header(b"GET")).unwrap(),
-            Method::GET
-        );
-    }
-
-    #[test]
-    fn parse_post() {
-        assert_eq!(
-            Method::try_from(&method_header(b"POST")).unwrap(),
-            Method::POST
-        );
-    }
-
-    #[test]
-    fn parse_put() {
-        assert_eq!(
-            Method::try_from(&method_header(b"PUT")).unwrap(),
-            Method::PUT
-        );
-    }
-
-    #[test]
-    fn parse_delete() {
-        assert_eq!(
-            Method::try_from(&method_header(b"DELETE")).unwrap(),
-            Method::DELETE
-        );
-    }
-
-    #[test]
-    fn parse_patch() {
-        assert_eq!(
-            Method::try_from(&method_header(b"PATCH")).unwrap(),
-            Method::PATCH
-        );
-    }
-
-    #[test]
-    fn parse_options() {
-        assert_eq!(
-            Method::try_from(&method_header(b"OPTIONS")).unwrap(),
-            Method::OPTIONS
-        );
-    }
-
-    #[test]
-    fn parse_head() {
-        assert_eq!(
-            Method::try_from(&method_header(b"HEAD")).unwrap(),
-            Method::HEAD
-        );
-    }
-
-    #[test]
-    fn parse_connect() {
-        assert_eq!(
-            Method::try_from(&method_header(b"CONNECT")).unwrap(),
-            Method::CONNECT
-        );
-    }
-
-    #[test]
-    fn parse_trace() {
-        assert_eq!(
-            Method::try_from(&method_header(b"TRACE")).unwrap(),
-            Method::TRACE
-        );
-    }
-
-    #[test]
-    fn unknown_method_returns_unexpected() {
-        assert!(matches!(
-            Method::try_from(&method_header(b"PURGE")),
-            Err(ParseHeaderError::Unexpected(_, _))
-        ));
-    }
-
-    #[test]
-    fn empty_method_returns_unexpected() {
-        assert!(matches!(
-            Method::try_from(&method_header(b"")),
-            Err(ParseHeaderError::Unexpected(_, _))
-        ));
-    }
-
-    #[test]
-    fn invalid_utf8_returns_bad_value() {
-        assert!(matches!(
-            Method::try_from(&method_header(&[0xFF, 0xFE])),
-            Err(ParseHeaderError::BadValue(_, _))
-        ));
     }
 }

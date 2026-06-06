@@ -38,6 +38,7 @@ test-context = { version = "0.5.8", optional = true }
 [dev-dependencies]
 test-context = "0.5.8"
 sqlx = { version = "0.8", features = [ "runtime-tokio", "tls-native-tls", "sqlite" ] }
+uuid = "*"
 
 [[test]]
 name = "simple_service"

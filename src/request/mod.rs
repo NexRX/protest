@@ -5,6 +5,7 @@ mod path;
 pub use body::*;
 pub use builder::*;
 pub use path::*;
+use strum::Display;
 
 use crate::{
     B_ACCEPT_ENCODING, B_AUTHORITY, B_METHOD, B_PATH, B_SCHEME, Encoding, Method, ProtestError,
@@ -37,6 +38,15 @@ pub struct Request<T: Debug> {
     pub body: T,
     /// If there is a body assosiated with the request
     pub(crate) body_assosiated: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display)]
+#[strum(serialize_all = "lowercase")]
+pub enum RequestParamKind {
+    Query,
+    Path,
+    Header,
+    Body,
 }
 
 impl RequestStream {

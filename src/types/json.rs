@@ -1,4 +1,4 @@
-use crate::{ByteCounter, FromBody, ProtestError, ResponseBody};
+use crate::{ByteCounter, FromBody, ProtestError, RequestError, ResponseBody, ResponseError};
 use derive_more::{Deref, DerefMut};
 use mime::Mime;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -50,8 +50,8 @@ impl<T: Serialize + Send + 'static> Json<T> {
 }
 
 impl<T: Debug + DeserializeOwned> FromBody for Json<T> {
-    fn from_body(bytes: &[u8]) -> Result<Self, ProtestError> {
-        serde_json::from_slice(bytes).map_err(ProtestError::from)
+    fn from_body(bytes: &[u8]) -> Result<Self, RequestError> {
+        serde_json::from_slice(bytes).map_err(|err| RequestError::from(err))
     }
 
     fn content_type() -> Option<Mime> {
@@ -61,7 +61,10 @@ impl<T: Debug + DeserializeOwned> FromBody for Json<T> {
 
 impl<T: Serialize + Send + 'static> ResponseBody for Json<T> {
     async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
-        serde_json::to_value(&self.inner)?.send(send).await
+        serde_json::to_value(&self.inner)
+            .map_err(ResponseError::from)?
+            .send(send)
+            .await
     }
 
     fn size(&self) -> Option<usize> {

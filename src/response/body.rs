@@ -1,4 +1,4 @@
-use crate::{ByteCounter, ProtestError};
+use crate::{ByteCounter, ProtestError, RequestError};
 use bytes::Bytes;
 use futures_util::{SinkExt, stream::BoxStream};
 use mime::Mime;
@@ -58,7 +58,7 @@ impl ResponseBody for Vec<u8> {
 
 impl ResponseBody for serde_json::Value {
     async fn send(self, send: &mut OutboundFrameSender) -> Result<(), ProtestError> {
-        let body = serde_json::to_vec(&self)?;
+        let body = serde_json::to_vec(&self).map_err(RequestError::from)?;
         send.send(OutboundFrame::Body(body.into(), true)).await?;
         Ok(())
     }

@@ -255,7 +255,16 @@ impl RouteHandlerInputs {
                     let raw_name = format_ident!("__protest_raw_{}", name);
                     let conversion = match &**param_ty {
                         syn::Type::Reference(_) => quote! { let #name: #param_ty = &*#raw_name; },
-                        _ => quote! { let #name = <String as Into<#param_ty>>::into(#raw_name); }
+                        _ => quote! {
+                            let __cloned_value = #raw_name.clone();
+                            let #name = <String as TryInto<#param_ty>>::try_into(#raw_name).map_err(|err| protest::RequestError::Invalid {
+                                name: #name_str.into(),
+                                kind: protest::RequestParamKind::Path,
+                                raw_value: Some(__cloned_value),
+                                conversion_type: Some(stringify!(#param_ty).into()),
+                                message: err.to_string(),
+                            })?;
+                        }
                     };
 
                     quote! {
@@ -263,10 +272,12 @@ impl RouteHandlerInputs {
                             .path
                             .split('/')
                             .nth(#path_param_position)
-                            .ok_or(protest::ProtestError::RequestPath {
-                                path_param: #name_str.to_string(),
-                                found: false,
-                                invalid: false,
+                            .ok_or(protest::RequestError::Invalid {
+                                name: #name_str.into(),
+                                kind: protest::RequestParamKind::Path,
+                                raw_value: None,
+                                conversion_type: None,
+                                message: format!("No path parameter found at position {}", #path_param_position),
                             })?
                             .into();
                         #conversion

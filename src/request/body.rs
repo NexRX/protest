@@ -1,10 +1,10 @@
-use crate::ProtestError;
+use crate::RequestError;
 use mime::Mime;
 use serde_json::Value;
 use std::fmt::Debug;
 
 pub trait FromBody: Sized + Debug {
-    fn from_body(bytes: &[u8]) -> Result<Self, ProtestError>;
+    fn from_body(bytes: &[u8]) -> Result<Self, RequestError>;
 
     fn content_type() -> Option<Mime>;
 
@@ -14,8 +14,8 @@ pub trait FromBody: Sized + Debug {
 }
 
 impl FromBody for Value {
-    fn from_body(bytes: &[u8]) -> Result<Self, ProtestError> {
-        serde_json::from_slice(bytes).map_err(ProtestError::from)
+    fn from_body(bytes: &[u8]) -> Result<Self, RequestError> {
+        serde_json::from_slice(bytes).map_err(RequestError::from)
     }
 
     fn content_type() -> Option<Mime> {
@@ -24,7 +24,7 @@ impl FromBody for Value {
 }
 
 impl FromBody for String {
-    fn from_body(bytes: &[u8]) -> Result<Self, ProtestError> {
+    fn from_body(bytes: &[u8]) -> Result<Self, RequestError> {
         Ok(String::from_utf8_lossy(bytes).to_string())
     }
 

@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn parse_multiple_encodings() {
-        let encodings = Encoding::try_from_header(&make_header(b"gzip deflate br")).unwrap();
+        let encodings = Encoding::try_from_header(&make_header(b"gzip, deflate, br")).unwrap();
         assert_eq!(encodings.len(), 3);
         assert!(matches!(encodings[0], Encoding::Gzip(None)));
         assert!(matches!(encodings[1], Encoding::Deflate(None)));

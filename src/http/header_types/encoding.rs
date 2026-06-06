@@ -32,7 +32,8 @@ impl Encoding {
 
         let values = str::from_utf8(value.value())
             .map_err(|e| ParseHeaderError::BadValue(ACCEPT_ENCODING.to_string(), e))?
-            .split_whitespace();
+            .split(",")
+            .map(|v| v.trim());
 
         for value in values {
             let split = value.split(";q=").collect::<Vec<_>>();

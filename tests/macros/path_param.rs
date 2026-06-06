@@ -22,6 +22,15 @@ impl DatabaseService {
             _ => 0,
         }
     }
+
+    #[service(method = GET, path = "/user/str/:name")]
+    fn age_via_str(&self, name: &str) -> usize {
+        match &*name {
+            "john" => 18,
+            "smith" => 20,
+            _ => 0,
+        }
+    }
 }
 
 #[test_context(IntegrationTest)]

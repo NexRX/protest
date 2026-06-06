@@ -2,7 +2,7 @@ use crate::{args::RouteArgs, service::path::PathParam};
 use darling::FromMeta;
 use proc_macro_error2::abort;
 use proc_macro2::TokenStream;
-use quote::{quote, quote_spanned};
+use quote::{format_ident, quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{Attribute, FnArg, Ident, ImplItem, ImplItemFn, ItemImpl, Pat, PatType, Receiver};
 
@@ -249,11 +249,17 @@ impl RouteHandlerInputs {
                 RouteHandlerInputs::PathParam(path_param) => {
                     let name = &path_param.name;
                     let name_str = path_param.name.to_string();
-
                     let param_ty = &path_param.fn_type.ty;
                     let path_param_position = path_param.path_position;
+
+                    let raw_name = format_ident!("__protest_raw_{}", name);
+                    let conversion = match &**param_ty {
+                        syn::Type::Reference(_) => quote! { let #name: #param_ty = &*#raw_name; },
+                        _ => quote! { let #name = <String as Into<#param_ty>>::into(#raw_name); }
+                    };
+
                     quote! {
-                        let #name: String = request_
+                        let #raw_name: String = request_
                             .path
                             .split('/')
                             .nth(#path_param_position)
@@ -263,7 +269,7 @@ impl RouteHandlerInputs {
                                 invalid: false,
                             })?
                             .into();
-                        let #name = <String as Into<#param_ty>>::into(#name);
+                        #conversion
                     }
                 },
             })

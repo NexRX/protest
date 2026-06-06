@@ -207,6 +207,75 @@ impl IntegrationTest {
         Self::recv_response(controller).await
     }
 
+    /// Sends multiple requests concurrently on a single QUIC connection and
+    /// collects all responses.  Each entry is `(method, path, body)`.
+    /// Returns responses in the order they are received from the server
+    /// (which may differ from the send order).
+    pub async fn send_concurrent(
+        &mut self,
+        requests: Vec<(Method, &str, Option<&[u8]>)>,
+    ) -> Vec<TestResponse> {
+        if self.server_handle.is_none() {
+            self.start().await;
+        }
+        if self.client.is_none() {
+            self.client = Some(self.new_client().await);
+        }
+        let (_, controller) = self.client.as_mut().unwrap();
+
+        let count = requests.len();
+
+        // Enqueue all requests before waiting for any response.
+        for (idx, (method, path, body)) in requests.into_iter().enumerate() {
+            let request_id = idx as u64;
+            if let Some(body) = body {
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                controller
+                    .request_sender()
+                    .send(NewClientRequest {
+                        request_id,
+                        headers: vec![
+                            h3::Header::new(b":method", method.as_bytes()),
+                            h3::Header::new(b":path", path.as_bytes()),
+                            h3::Header::new(b":scheme", b"https"),
+                            h3::Header::new(b":authority", b"localhost"),
+                        ],
+                        body_writer: Some(tx),
+                    })
+                    .expect("failed to enqueue request");
+                let body = Bytes::copy_from_slice(body);
+                tokio::spawn(async move {
+                    let mut outbound = rx.await.expect("body_writer sender dropped");
+                    outbound
+                        .send(OutboundFrame::Body(body, true))
+                        .await
+                        .expect("failed to write request body");
+                });
+            } else {
+                controller
+                    .request_sender()
+                    .send(NewClientRequest {
+                        request_id,
+                        headers: vec![
+                            h3::Header::new(b":method", method.as_bytes()),
+                            h3::Header::new(b":path", path.as_bytes()),
+                            h3::Header::new(b":scheme", b"https"),
+                            h3::Header::new(b":authority", b"localhost"),
+                        ],
+                        body_writer: None,
+                    })
+                    .expect("failed to enqueue request");
+            }
+        }
+
+        // Collect all responses.
+        let mut responses = Vec::with_capacity(count);
+        for _ in 0..count {
+            responses.push(Self::recv_response(controller).await);
+        }
+        responses
+    }
+
     async fn recv_response(controller: &mut ClientH3Controller) -> TestResponse {
         loop {
             match controller.event_receiver_mut().recv().await {

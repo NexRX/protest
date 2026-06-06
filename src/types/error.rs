@@ -20,7 +20,7 @@ pub enum ProtestError {
     #[error("Failed to send response object: {0}")]
     Response(PollSendError<OutboundFrame>),
     #[error("{0}")]
-    Generic(Box<dyn std::error::Error>),
+    Generic(String),
 }
 
 impl From<RequestBuilderError> for ProtestError {
@@ -31,7 +31,7 @@ impl From<RequestBuilderError> for ProtestError {
 
 impl From<Box<dyn std::error::Error>> for ProtestError {
     fn from(value: Box<dyn std::error::Error>) -> Self {
-        Self::Generic(value)
+        Self::Generic(value.to_string())
     }
 }
 

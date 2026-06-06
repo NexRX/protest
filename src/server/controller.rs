@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::ProtestError;
@@ -21,9 +22,8 @@ pub async fn handle_connection(
     mut controller: ServerH3Controller,
     routers: Arc<Vec<Box<dyn TRouter>>>,
 ) -> Result<(), ProtestError> {
-    let routers = routers.as_slice();
-    let mut request: Option<(RequestStream, OutboundFrameSender)> = None;
-    let mut dispatched = false;
+    let mut requests: HashMap<u64, (RequestStream, OutboundFrameSender)> = HashMap::new();
+    let mut dispatched: HashSet<u64> = HashSet::new();
 
     while let Some(event) = controller.event_receiver_mut().recv().await {
         match event {
@@ -41,19 +41,22 @@ pub async fn handle_connection(
                     ?is_in_early_data,
                     "Http Event (Server) - Incoming headers"
                 );
+                let stream_id = incoming_headers.stream_id;
+                let request = requests.get(&stream_id);
                 assert!(
                     request.is_none(),
                     "Request shouldn't have more than one headers event"
                 );
 
                 let read_fin = incoming_headers.read_fin;
-                request = Some(RequestStream::try_from_incoming(incoming_headers)?);
+                requests.insert(
+                    stream_id,
+                    RequestStream::try_from_incoming(incoming_headers)?,
+                );
 
-                // If the headers frame carried FIN the request has no body;
-                // dispatch it immediately instead of waiting for body events.
                 if read_fin {
-                    handle_request_via_iter(request.take().unwrap(), routers).await?;
-                    dispatched = true;
+                    bg_dispatch_request(&mut requests, routers.clone(), stream_id);
+                    dispatched.insert(stream_id);
                 }
             }
             ServerH3Event::Core(H3Event::BodyBytesReceived {
@@ -67,11 +70,10 @@ pub async fn handle_connection(
                     ?fin,
                     "Http Event - Body Received (Core)"
                 );
+                let request = requests.get(&stream_id);
 
                 match (request.is_some(), fin) {
-                    (false, _) if dispatched => {
-                        // Trailing FIN event after the request was already
-                        // dispatched early via read_fin in the headers frame.
+                    (false, _) if dispatched.contains(&stream_id) => {
                         trace!(
                             ?stream_id,
                             "Http Event (Core) - Ignoring trailing FIN after early dispatch"
@@ -80,23 +82,30 @@ pub async fn handle_connection(
                     (false, _) => Err("Request was consumed in error")?,
                     (true, false) => trace!("Http Event (Core) - Receiving body bytes"),
                     (true, true) => {
-                        dispatched = true;
-                        handle_request_via_iter(request.take().unwrap(), routers).await?;
+                        bg_dispatch_request(&mut requests, routers.clone(), stream_id);
+                        dispatched.insert(stream_id);
                     }
                 };
             }
             ServerH3Event::Core(H3Event::IncomingHeaders(mut incoming_headers)) => {
                 trace!(?incoming_headers, "Http Event (Core) - Incoming headers");
-                match (request.is_some(), incoming_headers.read_fin) {
+                match (
+                    requests.contains_key(&incoming_headers.stream_id),
+                    incoming_headers.read_fin,
+                ) {
                     (false, _) => Err("Request was consumed in error")?,
                     (true, false) => info!("More bytes available"),
-                    (true, true) => {
-                        handle_request_via_iter(request.take().unwrap(), routers).await?;
-                    }
+                    (true, true) => bg_dispatch_request(
+                        &mut requests,
+                        routers.clone(),
+                        incoming_headers.stream_id,
+                    ),
                 }
             }
             ServerH3Event::Core(H3Event::StreamClosed { stream_id }) => {
                 trace!(?stream_id, "Http Event (Core) - Stream closed");
+                requests.remove(&stream_id);
+                dispatched.remove(&stream_id);
             }
             unhandled_event => {
                 warn!(?unhandled_event, "Http Event - Unhandled");
@@ -107,7 +116,20 @@ pub async fn handle_connection(
     Ok(())
 }
 
-async fn handle_request_via_iter(
+fn bg_dispatch_request(
+    requests: &mut HashMap<u64, (RequestStream, OutboundFrameSender)>,
+    routers: Arc<Vec<Box<dyn TRouter>>>,
+    stream_id: u64,
+) {
+    let request = requests.remove(&stream_id).unwrap();
+    tokio::spawn(async move {
+        if let Err(err) = dispatch_request(request, &*routers).await {
+            error!(?err, "Http Event - Request Failed");
+        }
+    });
+}
+
+async fn dispatch_request(
     (request, mut send): (RequestStream, OutboundFrameSender),
     routers: &[Box<dyn TRouter>],
 ) -> Result<(), ProtestError> {

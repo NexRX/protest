@@ -51,7 +51,7 @@ impl<T: Serialize + Send + 'static> Json<T> {
 
 impl<T: Debug + DeserializeOwned> FromBody for Json<T> {
     fn from_body(bytes: &[u8]) -> Result<Self, RequestError> {
-        serde_json::from_slice(bytes).map_err(|err| RequestError::from(err))
+        serde_json::from_slice(bytes).map_err(RequestError::from)
     }
 
     fn content_type() -> Option<Mime> {

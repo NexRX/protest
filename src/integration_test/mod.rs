@@ -40,7 +40,7 @@ impl IntegrationTest {
         }
     }
 
-    async fn start(&mut self) {
+    pub async fn start(&mut self) {
         let server = self.server.take().expect("Server not initialized");
         self.server_handle = Some(tokio::spawn(async move {
             let _ = server.start().await;
@@ -276,7 +276,7 @@ impl IntegrationTest {
         responses
     }
 
-    async fn recv_response(controller: &mut ClientH3Controller) -> TestResponse {
+    pub async fn recv_response(controller: &mut ClientH3Controller) -> TestResponse {
         loop {
             match controller.event_receiver_mut().recv().await {
                 Some(ClientH3Event::Core(H3Event::IncomingHeaders(incoming))) => {

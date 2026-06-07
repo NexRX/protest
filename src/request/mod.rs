@@ -121,7 +121,7 @@ impl RequestStream {
                     request.method(Method::try_from(&header)?);
                 }
                 B_PATH => {
-                    request.path(String::from(RequestHeaders::try_to_owned(&header)?.1));
+                    request.path(RequestHeaders::try_to_owned(&header)?.1);
                 }
                 B_SCHEME => {
                     request.scheme(RequestHeaders::try_to_owned(&header)?.1);

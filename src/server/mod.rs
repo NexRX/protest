@@ -1,6 +1,5 @@
 mod controller;
 
-pub(crate) use controller::*;
 
 use crate::TRouter;
 use crate::TlsCertificatePathsOwned;
@@ -14,6 +13,8 @@ use tokio_quiche::metrics::DefaultMetrics;
 use tokio_quiche::settings::{CertificateKind, TlsCertificatePaths};
 use tokio_quiche::{ConnectionParams, ServerH3Driver};
 use tokio_stream::StreamExt;
+
+pub use controller::*;
 
 pub struct Server {
     pub(crate) cert: Option<TlsCertificatePathsOwned>,

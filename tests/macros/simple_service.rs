@@ -11,6 +11,11 @@ impl SimpleService {
     fn hello_world() -> &'static str {
         "hello"
     }
+
+    #[service(method = POST, path = "/hello/alloc", alloc_body)]
+    fn hello_world_alloc(body: String) -> String {
+        format!("hello {body}")
+    }
 }
 
 #[test]
@@ -24,5 +29,10 @@ async fn integration_test(test: &mut IntegrationTest) {
     test.server().routes(SimpleService);
 
     let res = test.send(Method::GET, "/hello", None::<String>, 0).await;
-    assert_response!(res, OK, [], "hello")
+    assert_response!(res, OK, [], "hello");
+
+    let res = test
+        .send(Method::POST, "/hello/alloc", None::<String>, 0)
+        .await;
+    assert_response!(res, OK, [], "hello alloc");
 }

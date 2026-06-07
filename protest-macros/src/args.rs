@@ -11,4 +11,8 @@ pub struct RouteArgs {
     pub method: Ident,
     /// Route path, e.g. `"/hello"`
     pub path: String,
+    /// Pre-allocates `content-length` header bytes of memory for the request body
+    /// if it needs to be fully loaded (buffered)
+    #[darling(default)]
+    pub alloc_body: bool,
 }

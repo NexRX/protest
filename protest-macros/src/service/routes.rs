@@ -155,7 +155,7 @@ impl Route {
     fn gen_fn_call(&self, fn_ident: &Ident) -> TokenStream {
         let conditional_await = self.method.sig.asyncness.is_some().then(|| quote! {.await});
         let inputs = RouteHandlerInputs::from_route(self);
-        let pre_call = RouteHandlerInputs::gen_pre_fn_call(&inputs);
+        let pre_call = RouteHandlerInputs::gen_pre_fn_call(&inputs, &self.args);
         let fn_args = RouteHandlerInputs::gen_fn_call_inputs(&inputs);
         let receiver = RouteHandlerInputs::gen_fn_receiver_tokens(&inputs);
 
@@ -224,7 +224,7 @@ impl RouteHandlerInputs {
             .collect()
     }
 
-    pub fn gen_pre_fn_call(inputs: &[Self]) -> TokenStream {
+    pub fn gen_pre_fn_call(inputs: &[Self], args: &RouteArgs) -> TokenStream {
         inputs
             .iter()
             .map(|input| match input {
@@ -239,10 +239,15 @@ impl RouteHandlerInputs {
                     } else {
                         abort!(pat_type, "Expect body fn argument to be known by an Ident i.e. `body: T` where `body` is the ident");
                     };
+                    let capacitity = match args.alloc_body {
+                        true => quote! {(&request_.headers.content_length).as_ref().map(|v| *v).unwrap_or_default()},
+                        false => quote! {0},
+                    };
 
                     let body_ty = &pat_type.ty;
                     quote! {
-                        let request_ = request_.into_buffered_typed::<#body_ty>(0).await?;
+                        let capacitity_ = #capacitity;
+                        let request_ = request_.into_buffered_typed::<#body_ty>(capacitity_).await?;
                         let #name = request_.body;
                     }
                 }

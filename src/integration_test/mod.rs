@@ -31,7 +31,7 @@ impl IntegrationTest {
             .local_addr()
             .expect("failed to get server local addr");
         let mut server = Server::new();
-        server.with_address(addr.clone());
+        server.with_address(addr);
         Self {
             server: Some(server),
             addr,
@@ -53,7 +53,7 @@ impl IntegrationTest {
 
         let mut i = 0;
         while i < MAX_TRIES {
-            if let Ok(_) = UdpSocket::bind(&self.addr).await {
+            if UdpSocket::bind(&self.addr).await.is_ok() {
                 break;
             }
             i += 1;
@@ -354,15 +354,11 @@ impl IntegrationTest {
         });
     }
 
-    pub fn server<'a>(&'a mut self) -> &'a mut Server {
+    pub fn server(&mut self) -> &mut Server {
         self.server
             .as_mut()
             .expect("server had started and not replaced")
     }
-
-    // pub fn addr<'a>(&'a self) -> &'a SocketAddr {
-    //     &self.addr
-    // }
 }
 
 impl AsyncTestContext for IntegrationTest {

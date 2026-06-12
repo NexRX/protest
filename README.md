@@ -1,3 +1,28 @@
+# Protest 
+*Dead simple HTTP/3 framework*
+
+## Roadmap
+- **Fluent Endpoint Definitions**
+  - [ ] Path Params
+  - [ ] Query Params
+  - [ ] Headers
+  - [ ] Request Body
+  - [ ] Response Body
+  - [ ] Errors *(Results)*
+- **HTTP Routing**
+  - [ ] Route Context *(Db Pools, Resources, Etc)*
+  - [ ] Multiplexing
+  - [ ] Middleware
+  - [ ] Error Handling *(500 Fallback, 404 No Route, Endpoint Errors)*
+- **Data Handling**
+  - [ ] Streamed Request/Response Body
+  - [ ] Buffered Request/Response Body
+  - [ ] Typesafe Request Body/Params
+  - [ ] Typesafe Response Body
+- **Typesafe Client Generation**
+  - [ ] JS/TS
+  - [ ] Rust
+
 ## Testing
 
 All tests:

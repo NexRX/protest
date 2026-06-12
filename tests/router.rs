@@ -15,12 +15,6 @@ pub struct ManualRouter {
 }
 
 impl ManualRouter {
-    pub fn new() -> Self {
-        Self {
-            context_data: Mutex::new(String::new()),
-        }
-    }
-
     pub fn sync_route(&self) -> String {
         self.context_data.lock().unwrap().clone()
     }
@@ -31,13 +25,20 @@ impl ManualRouter {
     }
 }
 
+impl Default for ManualRouter {
+    fn default() -> Self {
+        Self {
+            context_data: Mutex::new(String::new()),
+        }
+    }
+}
+
 impl TRouter for ManualRouter {
     fn can_handle_request(&self, request: &RequestStream) -> bool {
-        match (request.path_str(), request.method) {
-            ("/sync", GET) => true,
-            ("/async", POST) => true,
-            _ => false,
-        }
+        matches!(
+            (request.path_str(), request.method),
+            ("/sync", GET) | ("/async", POST)
+        )
     }
 
     fn len(&self) -> usize {
@@ -71,7 +72,7 @@ impl TRouter for ManualRouter {
 #[test_context(IntegrationTest)]
 #[tokio::test]
 async fn test_chunked_post_body_is_received(test: &mut IntegrationTest) {
-    test.server().routes(ManualRouter::new());
+    test.server().routes(ManualRouter::default());
 
     let body = "hello world, this is a chunked body!";
     let res = test.send_chunked(POST, "/async", body, 5, 1).await;
@@ -146,7 +147,7 @@ async fn test_h3_streams_are_multiplexed(test: &mut IntegrationTest) {
 #[test_context(IntegrationTest)]
 #[tokio::test]
 async fn test_server_with_manual_route(test: &mut IntegrationTest) {
-    test.server().routes(ManualRouter::new());
+    test.server().routes(ManualRouter::default());
 
     let res = test.send(GET, "/sync", None::<&[u8]>, 1).await;
     assert_response!(res, OK, [], "");

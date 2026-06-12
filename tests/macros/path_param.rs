@@ -29,7 +29,7 @@ impl DatabaseService {
 
     #[service(method = GET, path = "/user/str/:name")]
     fn age_via_str(&self, name: &str) -> usize {
-        match &*name {
+        match name {
             "john" => 18,
             "smith" => 20,
             _ => 0,
@@ -47,9 +47,9 @@ impl DatabaseService {
 
     #[service(method = GET, path = "/user/ref/:uuid")]
     fn age_via_ref(&self, uuid: &Uuid) -> usize {
-        match uuid {
-            &JOHN_UUID => 18,
-            &SMITH_UUID => 20,
+        match *uuid {
+            JOHN_UUID => 18,
+            SMITH_UUID => 20,
             _ => 0,
         }
     }
@@ -58,7 +58,7 @@ impl DatabaseService {
 #[test_context(IntegrationTest)]
 #[tokio::test]
 async fn integration_test(test: &mut IntegrationTest) {
-    test.server().routes(DatabaseService::default());
+    test.server().routes(DatabaseService);
 
     let res = test
         .send(Method::GET, "/user/string/john", None::<String>, 0)

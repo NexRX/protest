@@ -178,11 +178,9 @@ impl Route {
             .split('/')
             .enumerate()
             .filter_map(|(path_position, segment)| {
-                if segment.starts_with(':') {
-                    Some((path_position, segment[1..].to_string()))
-                } else {
-                    None
-                }
+                segment
+                    .strip_prefix(':')
+                    .map(|name| (path_position, name.to_string()))
             })
             .collect::<Vec<_>>()
     }
@@ -213,12 +211,12 @@ impl RouteHandlerInputs {
                 // match self
                 FnArg::Receiver(receiver) => Self::Receiver(receiver.to_owned()),
                 // match body
-                FnArg::Typed(pat_type) if Self::is_body(&pat_type) => Self::Body {
+                FnArg::Typed(pat_type) if Self::is_body(pat_type) => Self::Body {
                     fn_position,
                     pat_type: pat_type.clone(),
                 },
                 // match path
-                FnArg::Typed(pat_type) if Self::is_path_param(&pat_type, &path_params) => Self::PathParam(PathParam::from_pat_type(fn_position, &pat_type, &path_params)),
+                FnArg::Typed(pat_type) if Self::is_path_param(pat_type, &path_params) => Self::PathParam(PathParam::from_pat_type(fn_position, pat_type, &path_params)),
                 unsupported => abort!(unsupported, "Unsupported arguement because it couldn't be identified as one of the follow args: `self`, `body: T` / `#[body] arg: T`, `path_name: T` / `#[path(\"name\")] arg: T`"),
             })
             .collect()
